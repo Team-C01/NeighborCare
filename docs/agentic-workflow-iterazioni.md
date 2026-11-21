@@ -85,4 +85,6 @@ Sulla **Draft PR** aggiungere `fase:test`. `test.yml` genera eventuali **nuovi**
 
 ## 8. Controlli di collaudo ancora necessari
 
-Questi percorsi di recupero vanno provati con Issue e PR di test dedicate: piano respinto, prima implementazione fallita, correzione su Draft PR, test fallito, nuovo test e seconda review. La precedente prova #23/#24 ha verificato soltanto la strada documentale positiva, con creazione della PR recuperata manualmente.
+**Collaudo documentale realmente svolto:** la Issue #27 e la PR #28 hanno verificato pianificazione, revisione didattica del piano (non un errore reale), approvazione PM, creazione automatica Draft PR, Tester documentale, correzione editoriale, retest e report del Revisore AI. La PR #28 e la Issue #27 sono state chiuse **senza merge**: nessuna approvazione umana indipendente o merge e stata dimostrata da quella simulazione. La precedente prova #23/#24 aveva inoltre richiesto il recupero manuale della PR.
+
+**Ancora da collaudare:** PR applicativa con Test Frame veri, fallimento e recupero di un test applicativo, semantica del gate obbligatorio dopo l'aggiunta al Ruleset, review PM a commit aggiornato, merge effettuato esclusivamente da PM e rifiuto di merge da un account TM con Write. Conservare i log del collaudo prima di dichiarare pienamente operativo il nuovo gate.
