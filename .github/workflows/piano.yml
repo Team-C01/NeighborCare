@@ -18,12 +18,20 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - name: Controlla autorizzazione e piano gia pubblicato
+      - name: Controlla autorizzazione PM e piano gia pubblicato
         id: guard
         uses: actions/github-script@v7
+        env:
+          SECOND_PM_LOGIN: ${{ vars.NEIGHBORCARE_SECOND_PM_LOGIN }}
         with:
           script: |
             const n = context.issue.number;
+            const actor = (context.actor || '').toLowerCase();
+            const pmLogins = ['antonio-caiazzo', (process.env.SECOND_PM_LOGIN || '').toLowerCase()].filter(Boolean);
+            if (!pmLogins.includes(actor)) {
+              core.setFailed('Solo un PM autorizzato puo avviare il Pianificatore.');
+              return;
+            }
             const {data: access} = await github.rest.repos.getCollaboratorPermissionLevel({
               ...context.repo, username: context.actor
             });
