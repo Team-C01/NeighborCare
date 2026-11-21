@@ -6,8 +6,8 @@ Questa procedura integra `AGENTS.md`. Ogni passaggio che autorizza modifiche è 
 
 ## 1. Piano iniziale
 
-1. Aprire una Issue con etichetta `task-agente`.
-2. Aggiungere `fase:piano` e leggere il commento del Pianificatore.
+1. Un PM o un TM apre una Issue con etichetta `task-agente` e sette campi completi; il PM verifica il task.
+2. **Solo un PM** aggiunge `fase:piano` e legge con il TM il commento del Pianificatore. Il workflow rifiuta il trigger da un account TM.
 3. Se è corretto, il PM scrive nella **Issue** un commento con queste righe, ciascuna a inizio riga:
 
    ```text
@@ -16,7 +16,7 @@ Questa procedura integra `AGENTS.md`. Ogni passaggio che autorizza modifiche è 
    ```
 
    Usare percorsi **esatti** separati da virgole, non directory generiche o wildcard; massimo dodici file. Gli aggiornamenti dei modelli o le dipendenze devono essere approvati e inclusi fin dall'inizio nei file consentiti (i file di governance, test e i PDF restano protetti).
-4. Rimuovere `fase:piano` e aggiungere `fase:implementazione` sulla **Issue**. L'Implementatore convalida l'**ultimo** piano e l'approvazione successiva.
+4. Il **TM responsabile con Write** rimuove `fase:piano` e aggiunge `fase:implementazione` sulla **Issue**, soltanto dopo approvazione PM. L'Implementatore convalida l'**ultimo** piano e l'approvazione successiva.
 
 ## 2. Piano respinto: nuova versione
 
@@ -66,12 +66,23 @@ Sulla **Draft PR** aggiungere `fase:test`. `test.yml` genera eventuali **nuovi**
 
 ## 6. Permessi e CODEOWNERS
 
-- Il team `developers` mantiene accesso **Write**, mentre il futuro team `project-managers` dovrebbe avere accesso **Admin** alla repository e includere **Antonio Caiazzo ed Emanuele Iovane**.
+- Il team `developers` deve avere i sei TM come membri attivi con accesso **Write**; `project-managers` include **Antonio Caiazzo ed Emanuele Iovane** con accesso **Admin**. Verificare l'accettazione degli inviti prima di assegnare review.
 - I nomi delle persone **non** bastano per l'assegnazione GitHub: usare i loro login effettivamente verificati. Impostare `NEIGHBORCARE_SECOND_PM_LOGIN` con il login corretto di Emanuele; in caso contrario solo Antonio è riconosciuto come PM dai workflow.
-- **Non inserire `@Team-C01/project-managers` in `.github/CODEOWNERS` prima che il team esista, abbia accesso alla repository e sia visibile ai Code Owners.**
+- `.github/CODEOWNERS` assegna le review: per `frontend/` e `backend/` il Code Owner tecnico e `developers`, per `README.md`, workflow e governance e `project-managers`. Il Code Owner non limita da solo il pulsante Merge; il PM approva tramite review e un gate controlla la sua approvazione.
 - Configurare il Ruleset `main` richiedendo almeno **1 review umana**, **Code Owner review** e il controllo `repository-checks`. GitHub può rendere alcune opzioni non disponibili in base al piano dell'organizzazione.
 - L'appartenenza al team con permesso Admin sulla repository **non equivale** al ruolo Owner dell'organizzazione.
 
-## 7. Controlli di collaudo ancora necessari
+
+## 7. Governance delle PR e merge riservato ai PM
+
+- `.github/workflows/governance.yml` esegue il check `governance-gate` su PR verso `main` e sulle review GitHub. Una PR Ready e ammessa soltanto quando: esiste un report del Tester riferito allo SHA corrente; il Revisore AI ha pubblicato un report sullo stesso SHA; le rispettive Actions hanno conclusione `success`; almeno uno tra Antonio e il login di `NEIGHBORCARE_SECOND_PM_LOGIN` ha approvato tramite **Review changes > Approve** su quello SHA ed e diverso dall'autore della PR.
+- Un commento `APPROVAZIONE PM:` nella Issue approva il **piano**, non la PR. Il Revisore AI pubblica un commento, **non** una review APPROVED. Nel normale flusso il TM avvia test e Ready, un PM diverso dall'autore approva la PR e solo il PM autorizzato effettua il merge.
+- L'admin deve aggiungere **`governance-gate`** ai required status checks del Ruleset `Protect main - NeighborCare`, **in aggiunta** a `repository-checks`, dopo una prima run valida. Finche non viene inserito, il gate e soltanto informativo e non protegge il merge.
+- Per riservare materialmente il merge ai PM, creare un **secondo Ruleset** su `main`, con la sola opzione `Restrict updates` e bypass del team `project-managers` impostato `For pull requests only`. Sul Ruleset di protezione generale mantenere obbligatorie PR, Code Owner, review e status check per **tutti**, senza bypass degli admin se si vuole impedire eccezioni. Questa modifica e amministrativa e deve essere provata con un account TM Write e uno PM prima di dichiararla operativa. Non attivare `Restrict updates` sul Ruleset corrente senza configurare prima il bypass corretto.
+- `governance-gate` puo inizialmente essere rosso mentre la PR e Draft o in attesa dei report o della review PM. E previsto: dopo Tester, Revisore e `Approve` PM, la review scatena una nuova run. Se l'approvazione PM precede il report AI, effettuare `Re-run jobs` solo quando quest'ultimo e presente sullo SHA finale.
+- Dopo un nuovo commit, la precedente approvazione viene invalidata dal Ruleset. Ricominciare da `fase:test`, poi `Ready for review` e nuova review sullo SHA aggiornato.
+- I controlli non sostituiscono una verifica umana del comportamento corretto: una run verde non garantisce la qualita dei requisiti o degli esiti di testing.
+
+## 8. Controlli di collaudo ancora necessari
 
 Questi percorsi di recupero vanno provati con Issue e PR di test dedicate: piano respinto, prima implementazione fallita, correzione su Draft PR, test fallito, nuovo test e seconda review. La precedente prova #23/#24 ha verificato soltanto la strada documentale positiva, con creazione della PR recuperata manualmente.
