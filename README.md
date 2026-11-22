@@ -53,3 +53,7 @@ Per piani respinti, test falliti e revisioni con rilievi, seguire la [procedura 
 - **SDD** — System Design Document
 - **PR** — Pull Request
 - **CI** — Continuous Integration
+
+## Verifica workflow agentico
+
+Questa sezione è stata aggiunta per verificare il workflow agentico del Team C01.
