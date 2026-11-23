@@ -51,11 +51,11 @@ Frontend e backend non sono inizializzati: nessuna build o esecuzione di test ap
 
 Il PM verifica in GitHub: accessi Write, label `task-agente`, `fase:piano`, `fase:implementazione`, `fase:test`, secret `COPILOT_GITHUB_TOKEN`, permessi per creare PR e Ruleset che richieda 1 approvazione umana, Code Owner review e lo status check `repository-checks`. Per riconoscere il secondo PM che apre e assegna le Issue impostare la variabile repository `NEIGHBORCARE_SECOND_PM_LOGIN` con il suo login GitHub verificato. Non abilitare API AI esterne o spesa extra; verificare idoneità e quote Copilot/Actions. Le PR del bot possono richiedere un'azione umana per avviare altri workflow.
 
-Per approvare un piano, il TM assegnato usa `APPROVAZIONE TM:` e `File autorizzati:` dopo l'ultima versione pubblicata.
+Per autorizzare un piano, uno dei TM assegnati usa `AUTORIZZA PIANO:` e `File autorizzati:` dopo l'ultima versione pubblicata.
 
 Le modifiche alla pipeline vanno provate con un task documentale approvato prima di dichiarare funzionante il flusso completo. I PDF RAD/SDD restano fonti originali: non copiarne pagine in file Markdown. Questa semplificazione non esegue chiamate AI e non modifica PDF o template didattici.
 
-Per piani respinti, test falliti e revisioni con rilievi, seguire la [procedura di iterazione e recupero](docs/agentic-workflow-iterazioni.md). Il PM autorizza esplicitamente ogni correzione sulla Draft PR; non indebolire i test per ottenere una CI verde.
+Per piani respinti, test falliti e revisioni con rilievi, seguire la [procedura di iterazione e recupero](docs/agentic-workflow-iterazioni.md). Uno dei TM assegnati o un revisore autorizzato puo richiedere la correzione o reimplementazione con `RICHIESTA CORREZIONE:` sulla Draft PR; non indebolire i test per ottenere una CI verde.
 
 ## Glossario
 
