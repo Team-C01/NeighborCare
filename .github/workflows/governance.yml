@@ -38,9 +38,7 @@ jobs:
             const linked=(pr.body||'').match(/\b(?:Closes|Fixes)\s+#(\d+)\b/i);
             const frozen=(pr.body||'').match(/^TM responsabile: @([A-Za-z0-9-]+)$/m)?.[1]?.toLowerCase();
             let responsible='';
-            if (!linked || !frozen) {
-              problems.push('Mancano Closes #Issue o TM responsabile nella PR.');
-            } else {
+            if (linked && frozen) {
               const {data:issue}=await github.rest.issues.get({...context.repo,issue_number:Number(linked[1])});
               if (issue.state!=='open' || issue.assignees.length!==1) {
                 problems.push('Issue originale chiusa o senza un solo TM assegnato.');
@@ -77,6 +75,7 @@ jobs:
               core.notice('PR di governance: approvata dal secondo PM. CI e Code Owner review restano richiesti dal Ruleset.');
               return;
             }
+            if (!linked || !frozen) problems.push('Mancano Closes #Issue o TM responsabile nella PR.');
             const comments=await github.paginate(github.rest.issues.listComments,{...context.repo,issue_number:prNumber,per_page:100});
 
             const testerReport=comments.filter(c=>{
