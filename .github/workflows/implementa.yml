@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Verifica piano, autorizzazione e ambito autorizzato
         id: guard
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs'), path = require('path');
@@ -83,10 +83,10 @@ jobs:
               core.setFailed('Branch di implementazione gia esistente.'); return;
             } catch (err) { if (err.status !== 404) throw err; }
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - name: Installa Copilot CLI
@@ -151,14 +151,15 @@ jobs:
                 echo "::error::File protetto, test o generato non modificabile: $file"; exit 1 ;;
             esac
           done < <(git diff --cached --name-only -z)
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         if: ${{ hashFiles('backend/pom.xml') != '' }}
         with:
           distribution: temurin
+          problem-matcher: true
           java-version-file: backend/.java-version
           cache: maven
           cache-dependency-path: backend/pom.xml
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: ${{ hashFiles('frontend/package.json') != '' }}
         with:
           node-version-file: frontend/.nvmrc
