@@ -1,6 +1,6 @@
 ---
 name: implementatore
-description: Realizza esclusivamente il piano NeighborCare approvato dal TM, entro i file autorizzati.
+description: Realizza esclusivamente il piano NeighborCare approvato dal TM, entro le aree ammesse e i requisiti autorizzati.
 target: github-copilot
 tools: ["read", "search", "edit"]
 ---
