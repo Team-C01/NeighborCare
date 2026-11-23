@@ -31,9 +31,26 @@ jobs:
             if (!['write','maintain','admin'].includes(perm.permission) || pr.draft) {
               core.setFailed('Revisione consentita solo quando un membro autorizzato prepara la PR.'); return;
             }
+            const linked=(pr.body||'').match(/\b(?:Closes|Fixes)\s+#(\d+)\b/i);
+            const frozen=(pr.body||'').match(/^TM responsabile: @([A-Za-z0-9-]+)$/m)?.[1]?.toLowerCase();
+            if (!linked || !frozen || frozen!==(context.actor||'').toLowerCase()) {
+              core.setFailed('Solo il TM responsabile puo rendere la PR Ready for review.'); return;
+            }
+            const {data:issue}=await github.rest.issues.get({...context.repo,issue_number:Number(linked[1])});
+            if (issue.state!=='open' || issue.assignees.length!==1 ||
+                issue.assignees[0].login.toLowerCase()!==frozen) {
+              core.setFailed('Issue o assegnazione TM non valida.'); return;
+            }
             const comments=await github.paginate(github.rest.issues.listComments,{
               ...context.repo,issue_number:pr.number,per_page:100
             });
+            const tested=comments.some(c=>c.user?.login==='github-actions[bot]' &&
+              ((c.body||'').startsWith('## Tester indipendente — verifica documentale') &&
+                (c.body||'').includes('Commit esaminato: '+pr.head.sha) ||
+               (c.body||'').startsWith('## Tester indipendente — PR #'+pr.number) &&
+                (c.body||'').includes('Commit dopo il test: '+pr.head.sha) &&
+                /Risultato dei test automatici \(exit code\):\s*0\b/.test(c.body||'')));
+            if (!tested) { core.setFailed('Eseguire e superare il Tester prima di Ready for review.'); return; }
             const marker='## Revisione AI — PR #'+pr.number;
             if (comments.some(c=>(c.body||'').startsWith(marker) &&
                 (c.body||'').includes('Commit esaminato: '+pr.head.sha))) {
@@ -96,6 +113,8 @@ jobs:
             echo 'Non trascrivere pagine dei PDF RAD/SDD nei Markdown; indica semplicemente le fonti e i limiti di accesso.'
             echo 'Evidenzia severita, file e riga, differenza e azione richiesta. Non dichiarare controlli non eseguiti.'
             echo 'Include una sezione Diff, Modelli, Test, Rischi e Limiti; nessuna approvazione automatica.'
+            echo 'Riporta una riga ESITO_REVISIONE: PASS solo se non vi sono rilievi bloccanti.'
+            echo 'In caso di errore, incoerenza o dubbi bloccanti usa ESITO_REVISIONE: CHANGES_REQUESTED.'
             cat "$RUNNER_TEMP/pr.json" "$RUNNER_TEMP/issue.json" "$RUNNER_TEMP/diff.txt"
           } > "$RUNNER_TEMP/prompt.txt"
           copilot -p "$(cat "$RUNNER_TEMP/prompt.txt")" -s --model=auto --no-ask-user --no-auto-update \
@@ -131,9 +150,11 @@ jobs:
                 (c.body||'').includes('Commit esaminato: '+pr.head.sha))) {
               core.notice('Report gia presente per lo stesso commit.'); return;
             }
+            const verdictMatch=raw.match(/^ESITO_REVISIONE:\s*(PASS|CHANGES_REQUESTED)\s*$/m);
+            const verdict=verdictMatch?.[1]||'CHANGES_REQUESTED';
             let body=raw.replace(/^## Revisione AI[^\n]*\n?/,'').trim();
             body=body.replace(/Revisione automatica non sostituisce approvazione umana\.\s*$/,'').trim();
-            body=marker+'\n\nCommit esaminato: '+pr.head.sha+'\n\n'+body+
+            body=marker+'\n\nCommit esaminato: '+pr.head.sha+'\nESITO_REVISIONE: '+verdict+'\n\n'+body+
               '\n\nRevisione automatica non sostituisce approvazione umana.';
             await github.rest.issues.createComment({
               ...context.repo,issue_number:pr.number,body
