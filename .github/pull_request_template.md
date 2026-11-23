@@ -24,7 +24,7 @@ Tentativi falliti sullo stesso problema e interventi umani:
 ## Checklist di review
 
 - [ ] Issue e artefatti pertinenti collegati; piano autorizzato da un TM assegnato prima delle modifiche.
-- [ ] Modifiche coerenti con requisiti e modelli approvati, entro l’ambito autorizzato.
+- [ ] Modifiche coerenti con requisiti e modelli approvati, nell'ambito del piano e delle aree consentite.
 - [ ] Test derivati dalla specifica; copertura dei Test Frame ed esiti effettivi riportati.
 - [ ] Modelli interessati aggiornati nella stessa PR; deviazioni e nuove dipendenze approvate.
 - [ ] Nessun segreto/dato personale aggiunto e nessun test alterato per ottenere verde.
