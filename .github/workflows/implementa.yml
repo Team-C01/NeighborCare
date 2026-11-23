@@ -149,9 +149,7 @@ jobs:
               *) echo "::error::File fuori dalle aree consentite: $file"; exit 1 ;;
             esac
             case "$file" in
-              docs/rad/*|docs/sdd/*|docs/test/*|docs/modelli/*|docs/agentic-workflow-iterazioni.md|\
-*/src/test/*|*/tests/*|*.test.*|*.spec.*|*.pdf|*.lock.yml|*/.env|*/.env.*|\
-*/node_modules/*|*/target/*|*/dist/*|*/build/*)
+              docs/rad/*|docs/sdd/*|docs/test/*|docs/modelli/*|docs/agentic-workflow-iterazioni.md|*/src/test/*|*/tests/*|*.test.*|*.spec.*|*.pdf|*.lock.yml|*/.env|*/.env.*|*/node_modules/*|*/target/*|*/dist/*|*/build/*)
                 echo "::error::File protetto, test o generato non modificabile: $file"; exit 1 ;;
             esac
           done < <(git diff --cached --name-only -z)
@@ -212,9 +210,7 @@ jobs:
               *) echo "::error::File fuori dalle aree consentite: $file"; exit 1 ;;
             esac
             case "$file" in
-              docs/rad/*|docs/sdd/*|docs/test/*|docs/modelli/*|docs/agentic-workflow-iterazioni.md|\
-*/src/test/*|*/tests/*|*.test.*|*.spec.*|*.pdf|*.lock.yml|*/.env|*/.env.*|\
-*/node_modules/*|*/target/*|*/dist/*|*/build/*)
+              docs/rad/*|docs/sdd/*|docs/test/*|docs/modelli/*|docs/agentic-workflow-iterazioni.md|*/src/test/*|*/tests/*|*.test.*|*.spec.*|*.pdf|*.lock.yml|*/.env|*/.env.*|*/node_modules/*|*/target/*|*/dist/*|*/build/*)
                 echo "::error::File protetto, test o generato non modificabile: $file"; exit 1 ;;
             esac
           done < <(git diff --cached --name-only -z)
