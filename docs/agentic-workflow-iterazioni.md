@@ -1,89 +1,67 @@
-# NeighborCare - Workflow agentico e cicli iterativi
+# NeighborCare - Workflow e cicli iterativi
 
-Questa procedura integra `AGENTS.md` e descrive il flusso da Issue a merge. **I PM creano e assegnano i task; il TM assegnato gestisce autonomamente il resto.** Un altro TM revisiona la PR; le modifiche alla governance richiedono anche un PM. Nessun agente fa merge.
+## Ruoli
 
-## 1. Creazione e assegnazione
+I PM creano le Issue, assegnano **uno o piu TM** con Write, poi applicano manualmente `fase:piano`. L'assegnazione non avvia il Pianificatore. Ogni TM assegnato puo gestire i passaggi successivi; una review umana deve provenire da una persona Write non assegnata, TM o PM. Non e obbligatoria una review PM, nemmeno sulla governance.
 
-1. Un PM (Antonio o Emanuele) apre la Issue con il modulo `Task per agente` e tutti i sette campi, includendo specifiche, ambito e Test Frame.
-2. Il PM assegna **esattamente un TM con Write**. L'evento `issues: assigned` attiva `piano.yml`. Non occorre applicare manualmente `fase:piano`.
-3. Il Pianificatore analizza il task, pubblica una proposta e il workflow applica `fase:piano`. Se il creatore o chi assegna non è PM, se manca `task-agente` oppure se il TM non è idoneo, il workflow si blocca.
-4. Non modificare l'assegnatario dopo aver approvato il piano: la PR congela il login del TM e il gate controlla che coincida con la Issue.
+## Piano e autorizzazione
 
-## 2. Iterazione del piano
-
-Il TM confronta la proposta con RAD/SDD, file, metodi e test. Se ha rilievi, lascia **sulla Issue** un commento:
+Il Pianificatore pubblica un piano quando un PM applica `fase:piano`. Un TM assegnato puo chiedere modifiche sulla Issue:
 
 ```text
 RICHIESTA REVISIONE PIANO:
-Verificare il caso alternativo indicato nel Sequence Diagram.
-Indicare i Test Frame pertinenti e limitare i file da modificare.
+Aggiungere il recupero dei messaggi preesistenti.
+Controllare il Sequence Diagram e i Test Frame pertinenti.
 ```
 
-`ripianifica.yml` crea una nuova versione. Si può ripetere fino a tre richieste, poi serve intervento umano. Ogni nuova versione invalida le precedenti approvazioni.
-
-Solo il **TM assegnato** può approvare la versione corrente:
+`ripianifica.yml` pubblica la nuova versione. Per autorizzare l'ultima proposta uno dei TM assegnati scrive sulla Issue:
 
 ```text
-APPROVAZIONE TM: approvo il piano corrente per Issue #N.
-File autorizzati: backend/src/main/java/.../File.java, frontend/src/.../Page.tsx
+AUTORIZZA PIANO: autorizzo l'ultima versione del piano.
+File autorizzati: backend/src/main/java/.../ChatService.java
 ```
 
-Indicare solo percorsi esatti, separati da virgole; massimo 12. Non inserire directory generiche, wildcard, test già esistenti, governance o PDF.
+Massimo 12 percorsi **esatti** di file; una autorizzazione precedente all'ultimo piano non vale. Il limite di tre ripianificazioni richiede una verifica umana in caso di stallo.
 
-## 3. Implementatore e prima prova
+## Prima implementazione
 
-1. Il TM rimuove `fase:piano` e aggiunge `fase:implementazione` alla **Issue**.
-2. `implementa.yml` verifica l'approvazione TM successiva all'ultimo piano, il suo accesso Write, l'ambito e la presenza di un unico assegnatario.
-3. L'Implementatore crea `agent/issue-N-implementazione`, commit e **Draft PR** con `Closes #N` e `TM responsabile: @login`. Non modifica i test e non fa merge.
-4. Il TM aggiunge `fase:test` alla **Draft PR**. `test.yml` genera test dalle specifiche e dai Test Frame (non dal comportamento del codice) e pubblica un report con risultato e ID della run.
-5. Nei task solo documentali il Tester riporta N/A per i test applicativi, con controlli su diff e CI ugualmente obbligatori.
+Un TM assegnato sostituisce `fase:piano` con `fase:implementazione` **sulla Issue**. `implementa.yml` controlla autore e data dell'autorizzazione, verifica i percorsi, crea un branch e una Draft PR con `Closes #N`, `TM autorizzante: @login` e `TM assegnati: @a, @b`. L'elenco degli assegnatari viene congelato: se cambia, il workflow deve fermarsi finche non si decide come procedere.
 
-## 4. Loop del Tester e delle correzioni
+## Tester e correzioni
 
-Se il Tester fallisce, **non fare Ready for review e non modificare i test per ottenere verde**. Il TM responsabile legge frame, atteso e osservato e commenta sulla Draft PR:
+Un TM assegnato applica `fase:test` **alla Draft PR**. Il Tester produce test indipendenti dalle specifiche e un report. Se un test fallisce, il Tester non corregge codice o test: un TM assegnato o revisore autorizzato pubblica sulla **PR**:
 
 ```text
 RICHIESTA CORREZIONE:
-Il test TF_07 fallisce.
-Atteso: una richiesta completata non e annullabile.
-Osservato: viene annullata.
-Correggere l'implementazione senza cambiare test o requisiti.
+TF_07 fallisce.
+Atteso: richiesta completata non annullabile.
+Osservato: annullamento consentito.
+Correggere il comportamento senza modificare i test.
 ```
 
-**Il prefisso esatto e `RICHIESTA CORREZIONE:`.** Possono utilizzarlo il TM assegnato e un altro TM revisore autorizzato (richiesto come reviewer o che abbia espresso CHANGES_REQUESTED). Il workflow verifica l'autore e non accetta richieste anonime o di estranei.
+La stessa richiesta puo dire **Reimplementare completamente il metodo/la classe**, purche entro i file e i requisiti autorizzati. `correzione.yml` aggiorna lo stesso branch e la stessa PR, pubblicando un nuovo commit. Per i nuovi test il TM rimuove e riaggiunge `fase:test`; controllare nuovamente tutti i test pertinenti.
 
-`correzione.yml` aggiorna lo **stesso branch e la stessa PR**, limitandosi ai file approvati; non modifica test, governance o PDF. Il TM rimuove e riaggiunge la label `fase:test` sulla PR e controlla il risultato sul nuovo SHA. Se ancora fallisce, può ripetere. **Dopo tre tentativi falliti, stop e intervento umano.**
+Tre tentativi AI consecutivi senza test superati richiedono intervento umano. Un nuovo ciclo puo iniziare quando, dopo test superati, emerge un rilievo ulteriore in review. Se e sbagliato il Test Frame oppure servono file/requisiti fuori ambito, fermarsi e aprire un altro task, senza indebolire i test.
 
-Se la specifica o un Test Frame sono errati, il team deve correggere il modello tramite un task separato. Non si possono cambiare requisiti o ampliare l'ambito usando la correzione.
+## Revisore AI e review umana
 
-## 5. Loop della revisione
+Dopo Tester positivo, un TM assegnato clicca **Ready for review**. `revisione.yml` valuta diff e modelli e pubblica `ESITO_REVISIONE: PASS` o `CHANGES_REQUESTED`.
 
-1. Quando il Tester è riuscito, il TM assegnato usa **Ready for review**.
-2. `revisione.yml` confronta i cambiamenti con modelli e test e pubblica `ESITO_REVISIONE: PASS` oppure `ESITO_REVISIONE: CHANGES_REQUESTED`. Il Revisore AI non esegue una GitHub review APPROVED.
-3. Con errori AI oppure review umana `Request changes`, **Convert to draft**, lascia `RICHIESTA CORREZIONE:` e ripeti correzione, Tester, Ready for review e Revisore AI.
-4. Se tutti i controlli sono positivi, un **altro TM** approva tramite **Review changes > Approve**, sul commit corrente. Il TM responsabile non può approvare la propria implementazione, anche se la PR risulta creata dal bot.
-5. I file di governance (`.github/`, `AGENTS.md`, `README.md` e questa procedura) richiedono review PM secondo `CODEOWNERS`.
+Se AI o persona trovano un problema: **Convert to draft**, commento `RICHIESTA CORREZIONE:`, correzione o reimplementazione nei file approvati, retest con `fase:test`, nuovo Ready for review e nuovo report AI. La PR non viene ricreata e il Revisore AI non modifica codice.
 
-## 6. Governance e merge
+Un revisore umano con Write, **non tra gli assegnatari**, approva sullo SHA corrente con Review changes > Approve. Puo essere un TM o Emanuele come PM, ma nessun PM e richiesto obbligatoriamente. Dopo un nuovo commit, invalidare le vecchie approvazioni.
 
-Il job `governance-gate` verifica Issue e assegnazione invariata, PR Ready, report Tester riuscito con run conclusa positivamente, Revisore AI riuscito con verdetto PASS, e review umana indipendente sullo SHA corrente. Per il codice serve un altro TM; per i file governance serve anche PM. Il Ruleset `Protect main - NeighborCare` richiede `repository-checks`, `governance-gate`, una review APPROVED e Code Owner review.
+## Governance e merge
 
-È normale che `governance-gate` sia rosso **prima** di Tester, Revisore e review umana. La review umana, svolta dopo i report, scatena una nuova verifica. Se arriva un nuovo commit, ricominciare dal Tester e dalla review sul nuovo SHA.
+`governance-gate` controlla la corrispondenza tra assegnatari Issue/PR, Tester riuscito sul commit attuale, Revisore AI con verdetto PASS e review indipendente. Il Ruleset `Protect main - NeighborCare` richiede anche `repository-checks` e Code Owner review; `CODEOWNERS` consente reviewers developers **o** project-managers. Il merge e sempre manuale da TM o PM autorizzato. L'Issue collegata e la board si aggiornano dopo il merge.
 
-Il **merge è sempre manuale**, effettuato da un TM o PM autorizzato. La chiusura della Issue collegata e l'aggiornamento della board sono automatici dopo il merge.
+Il Ruleset separato `PM-only merge - NeighborCare` va aggiornato tramite GitHub Settings, altrimenti i TM non possono fare merge nonostante i nuovi workflow. Non disattivare i required checks. I push di GitHub Actions con `GITHUB_TOKEN` possono non riattivare automaticamente altri workflow: gli eventi manuali su label e Ready for review fanno ripartire i controlli.
 
-**Attività Admin obbligatoria dopo la PR:** disabilitare o adeguare il Ruleset `PM-only merge - NeighborCare`, altrimenti i TM non potranno effettuare il merge nonostante i nuovi workflow. Non rimuovere le protezioni del Ruleset principale.
+## Recupero
 
-## 7. Recupero da errori
-
-- Pianificatore assente: verificare PM che apre e assegna, un solo TM con Write, label `task-agente`.
-- Implementatore fallito prima del push: verificare i log; solo senza branch/PR esistenti si può riaggiungere `fase:implementazione`.
-- Branch creato senza PR: recuperare manualmente la Draft PR sul branch esistente, non ricreare il branch.
-- Tester fallito: Draft, commento di correzione, retest, nessun merge.
-- Revisore o Code Owner non approva: Convert to draft e nuova iterazione completa.
-- Dopo tre tentativi: conservare log e SHA e passare a revisione manuale del team.
-- Gli eventi GitHub generati mediante `GITHUB_TOKEN` non riattivano sempre altri workflow; per retest usare una label applicata da una persona, per revisione l'evento Ready for review.
-
-## 8. Tracciabilita e responsabilita
-
-Conservare commenti di approvazione, versione del piano, report, test frame, SHA e review umane. I PDF originali RAD/SDD non vanno alterati e gli esempi XX/YY non sono requisiti da implementare. CI e agenti supportano il team ma non sostituiscono responsabilità e verifica umana.
+- Piano assente: PM verifica assegnatari e applica `fase:piano`.
+- Implementazione fallita prima del push: leggere i log; non ripetere la fase se branch o PR esistono gia.
+- Branch creato ma PR assente: recuperare la Draft PR esistente.
+- Tester fallito: richiesta di correzione e retest.
+- Review negativa: convertire a Draft, reimplementare o correggere, poi test e nuova review.
+- Tre tentativi inefficaci: coinvolgere un membro del team e conservare log, commit e evidenze.
