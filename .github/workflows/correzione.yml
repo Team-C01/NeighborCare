@@ -22,8 +22,6 @@ jobs:
       - name: Autorizza correzione TM, ambito e massimo tre tentativi
         id: guard
         uses: actions/github-script@v7
-        env:
-          SECOND_PM_LOGIN: ${{ vars.NEIGHBORCARE_SECOND_PM_LOGIN }}
         with:
           script: |
             const fs=require('fs'),path=require('path');
@@ -44,20 +42,20 @@ jobs:
               core.setFailed('Branch non creato dal flusso di implementazione approvato.'); return;
             }
             const {data:issue}=await github.rest.issues.get({...context.repo,issue_number:issueNumber});
-            const assignedTms=new Set((issue.assignees||[]).map(u=>u.login.toLowerCase()));
-            const frozen=(pr.body||'').match(/^TM assegnati:\s*(.+)$/m)?.[1]
+            const assignedMembers=new Set((issue.assignees||[]).map(u=>u.login.toLowerCase()));
+            const frozen=(pr.body||'').match(/^Responsabili assegnati:\s*(.+)$/m)?.[1]
               ?.split(',').map(s=>s.trim().replace(/^@/,'').toLowerCase()).sort();
-            const approver=(pr.body||'').match(/^TM autorizzante: @([A-Za-z0-9-]+)$/m)?.[1]?.toLowerCase();
-            if (issue.state!=='open' || !assignedTms.size || !frozen || !approver ||
-                !assignedTms.has(approver) ||
-                JSON.stringify([...assignedTms].sort())!==JSON.stringify(frozen)) {
+            const approver=(pr.body||'').match(/^Autorizzante: @([A-Za-z0-9-]+)$/m)?.[1]?.toLowerCase();
+            if (issue.state!=='open' || !assignedMembers.size || !frozen || !approver ||
+                !assignedMembers.has(approver) ||
+                JSON.stringify([...assignedMembers].sort())!==JSON.stringify(frozen)) {
               core.setFailed('Issue e assegnatari devono corrispondere alla PR autorizzata.'); return;
             }
             const {data:reviewList}=await github.rest.pulls.listReviews({...context.repo,pull_number:prNumber,per_page:100});
             const reviewerRequested=(pr.requested_reviewers||[]).some(u=>u.login.toLowerCase()===actor);
             const reviewerChanges=reviewList.some(r=>(r.user?.login||'').toLowerCase()===actor && r.state==='CHANGES_REQUESTED');
-            if (!assignedTms.has(actor) && !reviewerRequested && !reviewerChanges) {
-              core.setFailed('Solo un TM assegnato o un revisore autorizzato con Write puo richiedere correzioni.'); return;
+            if (!assignedMembers.has(actor) && !reviewerRequested && !reviewerChanges) {
+              core.setFailed('Solo un assegnatario o un revisore autorizzato con Write puo richiedere correzioni.'); return;
             }
             const feedback=context.payload.comment;
             if ((feedback.body||'').length<35 || feedback.body.length>6000) {
@@ -85,11 +83,11 @@ jobs:
             const plan=comments.filter(c=>c.user?.login==='github-actions[bot]' &&
               (c.body||'').startsWith('## Piano proposto dal Pianificatore AI')).at(-1);
             if (!plan) { core.setFailed('Piano originale assente.'); return; }
-            if (comments.some(c=>assignedTms.has((c.user?.login||'').toLowerCase()) &&
+            if (comments.some(c=>assignedMembers.has((c.user?.login||'').toLowerCase()) &&
                 c.created_at>plan.created_at && /^RICHIESTA REVISIONE PIANO:/m.test(c.body||''))) {
               core.setFailed('Revisione del piano ancora richiesta: blocco correzioni.'); return;
             }
-            const approval=comments.filter(c=>assignedTms.has((c.user?.login||'').toLowerCase()) &&
+            const approval=comments.filter(c=>assignedMembers.has((c.user?.login||'').toLowerCase()) &&
               c.created_at>plan.created_at && /^AUTORIZZA PIANO:/m.test(c.body||'')).at(-1);
             if (!approval) { core.setFailed('Approvazione del piano corrente assente.'); return; }
             const {data:approvalPerm}=await github.rest.repos.getCollaboratorPermissionLevel({
@@ -103,7 +101,7 @@ jobs:
             core.setOutput('pr_branch',pr.head.ref);
             core.setOutput('pr_sha',pr.head.sha);
             core.setOutput('issue_number',String(issueNumber));
-            core.notice('TM autorizzato, branch e ambito originale verificati.');
+            core.notice('Assegnatario autorizzato, branch e ambito originale verificati.');
       - uses: actions/checkout@v4
         if: ${{ steps.guard.outputs.skip == 'false' }}
         with:
@@ -140,7 +138,7 @@ jobs:
           test -n "$COPILOT_GITHUB_TOKEN"
           {
             cat AGENTS.md .github/agents/implementatore.agent.md
-            echo 'Sei l Implementatore. Correggi o reimplementa nell ambito del piano il problema riportato dal TM sulla Draft PR esistente.'
+            echo 'Sei l Implementatore. Correggi o reimplementa nell ambito del piano il problema riportato dall assegnatario sulla Draft PR esistente.'
             echo 'La autorizzazione AUTORIZZA PIANO: non richiede una lista di file; segui rigorosamente i requisiti e il piano approvati.'
             echo 'Puoi correggere o reimplementare nei file applicativi backend/, frontend/ e nella documentazione ordinaria (README.md, docs/).'
             echo 'Non modificare test, Test Frame, governance, modelli RAD/SDD, PDF, segreti, .env o dipendenze non approvate.'

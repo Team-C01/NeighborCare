@@ -32,15 +32,15 @@ jobs:
               core.setFailed('La label Test puo essere attivata solo dal team con accesso Write.'); return;
             }
             const linked=(pr.body||'').match(/\b(?:Closes|Fixes)\s+#(\d+)\b/i);
-            const frozen=(pr.body||'').match(/^TM assegnati:\s*(.+)$/m)?.[1]
+            const frozen=(pr.body||'').match(/^Responsabili assegnati:\s*(.+)$/m)?.[1]
               ?.split(',').map(s=>s.trim().replace(/^@/,'').toLowerCase()).sort();
-            if (!linked || !frozen) { core.setFailed('Manca la Issue collegata o elenco TM assegnati.'); return; }
+            if (!linked || !frozen) { core.setFailed('Manca la Issue collegata o elenco degli assegnatari.'); return; }
             const {data:assignedIssue}=await github.rest.issues.get({...context.repo,issue_number:Number(linked[1])});
-            const assignedTms=(assignedIssue.assignees||[]).map(u=>u.login.toLowerCase()).sort();
-            if (assignedIssue.state!=='open' || !assignedTms.length ||
-                JSON.stringify(assignedTms)!==JSON.stringify(frozen) ||
-                !assignedTms.includes((context.actor||'').toLowerCase())) {
-              core.setFailed('Solo un TM assegnato puo avviare il Tester con assegnazione invariata.'); return;
+            const assignedMembers=(assignedIssue.assignees||[]).map(u=>u.login.toLowerCase()).sort();
+            if (assignedIssue.state!=='open' || !assignedMembers.length ||
+                JSON.stringify(assignedMembers)!==JSON.stringify(frozen) ||
+                !assignedMembers.includes((context.actor||'').toLowerCase())) {
+              core.setFailed('Solo un assegnatario puo avviare il Tester con assegnazione invariata.'); return;
             }
             const files=await github.paginate(github.rest.pulls.listFiles,{
               ...context.repo,pull_number:pr.number,per_page:100
