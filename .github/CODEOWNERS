@@ -9,8 +9,8 @@
 * @Team-C01/developers @Team-C01/project-managers
 
 # Codice applicativo: proprietari tecnici Team Members.
-/backend/ @Team-C01/developers
-/frontend/ @Team-C01/developers
+/backend/ @Team-C01/developers @Team-C01/project-managers
+/frontend/ @Team-C01/developers @Team-C01/project-managers
 
 # Documentazione: revisione tecnica o di Project Management.
 /docs/ @Team-C01/developers @Team-C01/project-managers
