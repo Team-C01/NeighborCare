@@ -32,17 +32,17 @@ jobs:
               core.setFailed('Revisione consentita solo quando un membro autorizzato prepara la PR.'); return;
             }
             const linked=(pr.body||'').match(/\b(?:Closes|Fixes)\s+#(\d+)\b/i);
-            const frozen=(pr.body||'').match(/^TM assegnati:\s*(.+)$/m)?.[1]
+            const frozen=(pr.body||'').match(/^Responsabili assegnati:\s*(.+)$/m)?.[1]
               ?.split(',').map(s=>s.trim().replace(/^@/,'').toLowerCase()).sort();
             if (!linked || !frozen) {
-              core.setFailed('La PR deve contenere Issue collegata e TM assegnati.'); return;
+              core.setFailed('La PR deve contenere Issue collegata e assegnatari.'); return;
             }
             const {data:issue}=await github.rest.issues.get({...context.repo,issue_number:Number(linked[1])});
-            const assignedTms=(issue.assignees||[]).map(u=>u.login.toLowerCase()).sort();
-            if (issue.state!=='open' || !assignedTms.length ||
-                JSON.stringify(assignedTms)!==JSON.stringify(frozen) ||
-                !assignedTms.includes((context.actor||'').toLowerCase())) {
-              core.setFailed('Solo uno dei TM assegnati puo rendere Ready for review.'); return;
+            const assignedMembers=(issue.assignees||[]).map(u=>u.login.toLowerCase()).sort();
+            if (issue.state!=='open' || !assignedMembers.length ||
+                JSON.stringify(assignedMembers)!==JSON.stringify(frozen) ||
+                !assignedMembers.includes((context.actor||'').toLowerCase())) {
+              core.setFailed('Solo uno degli assegnatari puo rendere Ready for review.'); return;
             }
             const comments=await github.paginate(github.rest.issues.listComments,{
               ...context.repo,issue_number:pr.number,per_page:100

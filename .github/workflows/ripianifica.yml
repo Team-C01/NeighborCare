@@ -21,15 +21,13 @@ jobs:
       - name: Verifica feedback TM, fase e limite di tentativi
         id: guard
         uses: actions/github-script@v7
-        env:
-          SECOND_PM_LOGIN: ${{ vars.NEIGHBORCARE_SECOND_PM_LOGIN }}
         with:
           script: |
             const n=context.issue.number;
             const author=(context.actor||'').toLowerCase();
             const {data:issue}=await github.rest.issues.get({...context.repo,issue_number:n});
             if (!issue.assignees.some(u=>u.login.toLowerCase()===author)) {
-              core.setFailed('Solo un TM assegnato puo richiedere un nuovo piano.'); return;
+              core.setFailed('Solo un assegnatario puo richiedere un nuovo piano.'); return;
             }
             const {data:perm}=await github.rest.repos.getCollaboratorPermissionLevel({...context.repo,username:context.actor});
             if (!['write','maintain','admin'].includes(perm.permission)) { core.setFailed('TM privo di accesso Write.'); return; }
@@ -91,7 +89,7 @@ jobs:
           {
             cat AGENTS.md .github/agents/pianificatore.agent.md
             echo 'Sei il Pianificatore di NeighborCare. Scrivi una NUOVA VERSIONE del piano.'
-            echo 'Il TM assegnato ha respinto un piano precedente: affronta espressamente i rilievi del suo ULTIMO feedback.'
+            echo 'L assegnatario ha respinto un piano precedente: affronta espressamente i rilievi del suo ULTIMO feedback.'
             echo 'Non modificare i file, non usare shell, non fare commit, push o PR.'
             echo 'Indica ambito, percorsi autorizzabili, requisiti, test, rischi e le eventuali incertezze.'
             echo 'Non presumere che il nuovo piano sia approvato; richiedi sempre una nuova AUTORIZZA PIANO.'
