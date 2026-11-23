@@ -19,7 +19,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - name: Verifica piano, approvazione TM e ambito autorizzato
+      - name: Verifica piano, autorizzazione e ambito autorizzato
+        id: guard
         uses: actions/github-script@v7
         env:
           SECOND_PM_LOGIN: ${{ vars.NEIGHBORCARE_SECOND_PM_LOGIN }}
@@ -37,9 +38,9 @@ jobs:
             if (issue.state !== 'open' || !issue.labels.some(l=>l.name==='fase:implementazione')) {
               core.setFailed('Issue o fase non valida.'); return;
             }
-            if (issue.assignees.length!==1 ||
-                issue.assignees[0].login.toLowerCase()!==(context.actor||'').toLowerCase()) {
-              core.setFailed('Solo il TM assegnato puo avviare l Implementatore.'); return;
+            const assignedTms=new Set((issue.assignees||[]).map(u=>u.login.toLowerCase()));
+            if (!assignedTms.size || !assignedTms.has((context.actor||'').toLowerCase())) {
+              core.setFailed('Solo un TM assegnato puo avviare l Implementatore.'); return;
             }
             const comments = await github.paginate(github.rest.issues.listComments,{
               ...context.repo, issue_number:n, per_page:100
@@ -47,9 +48,8 @@ jobs:
             const plan = comments.filter(c=>c.user?.login === 'github-actions[bot]' &&
               (c.body||'').startsWith('## Piano proposto dal Pianificatore AI')).at(-1);
             if (!plan) { core.setFailed('Piano AI assente: fermare l implementazione.'); return; }
-            const assignedTm=issue.assignees[0].login.toLowerCase();
             const unresolvedFeedback = comments.some(c =>
-              (c.user?.login||'').toLowerCase()===assignedTm &&
+              assignedTms.has((c.user?.login||'').toLowerCase()) &&
               c.created_at > plan.created_at &&
               /^RICHIESTA REVISIONE PIANO:/m.test(c.body||''));
             if (unresolvedFeedback) {
@@ -57,9 +57,9 @@ jobs:
               return;
             }
             const approvals = comments.filter(c =>
-              (c.user?.login||'').toLowerCase()===assignedTm &&
+              assignedTms.has((c.user?.login||'').toLowerCase()) &&
               c.created_at > plan.created_at &&
-              /^APPROVAZIONE TM:/m.test(c.body||'') &&
+              /^AUTORIZZA PIANO:/m.test(c.body||'') &&
               /^File autorizzati:/m.test(c.body||'')
             );
             const approval = approvals.at(-1);
@@ -73,6 +73,7 @@ jobs:
             if (!['write','maintain','admin'].includes(approvalPerm.permission)) {
               core.setFailed('Il TM che ha approvato non ha piu accesso Write.'); return;
             }
+            core.setOutput('approver_login',approval.user.login);
             const match = (approval.body||'').match(/^File autorizzati:\s*(.+)$/m);
             const allowed = (match?.[1]||'').split(',').map(s=>s.trim()).filter(Boolean);
             const validPath = p => /^[A-Za-z0-9_.\/-]+$/.test(p) &&
@@ -223,9 +224,10 @@ jobs:
             commit -m "Issue #${ISSUE_NUMBER}: implement approved plan"
           gh auth setup-git
           git push origin "HEAD:refs/heads/agent/issue-${ISSUE_NUMBER}-implementazione"
-          ASSIGNED_TM="$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER" --jq '.assignee.login')"
-          test -n "$ASSIGNED_TM"
-          { printf 'Closes #%s\nTM responsabile: @%s\n\n' "$ISSUE_NUMBER" "$ASSIGNED_TM"; cat "$RUNNER_TEMP/report.md"; } > "$RUNNER_TEMP/pr.md"
+          ASSIGNED_TMS="$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER" --jq '[.assignees[].login | ascii_downcase] | sort | map("@" + .) | join(", ")')"
+          APPROVER="${{ steps.guard.outputs.approver_login }}"
+          test -n "$ASSIGNED_TMS" && test -n "$APPROVER"
+          { printf 'Closes #%s\nTM autorizzante: @%s\nTM assegnati: %s\n\n' "$ISSUE_NUMBER" "$APPROVER" "$ASSIGNED_TMS"; cat "$RUNNER_TEMP/report.md"; } > "$RUNNER_TEMP/pr.md"
           gh pr create --repo "$GITHUB_REPOSITORY" --base main \
             --head "agent/issue-${ISSUE_NUMBER}-implementazione" --draft \
             --title "[AGENTE] Issue #${ISSUE_NUMBER}" --body-file "$RUNNER_TEMP/pr.md"
