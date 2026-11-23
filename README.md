@@ -14,22 +14,29 @@ I workflow seguono i passi 7, 9, 10, 11 e 14 del tutorial, usando Copilot CLI al
 
 ## Flusso di lavoro
 
-1. **PM oppure TM** apre e compila una Issue usando il template `Task per agente` (sette campi, riferimenti e test). Il PM verifica obiettivo, ambito, priorità e completezza, poi **solo un PM** applica `fase:piano` alla Issue: [piano.yml](.github/workflows/piano.yml) pubblica un piano AI senza modificare file.
-2. PM e TM responsabile leggono il piano. Se è errato, il **PM** commenta la Issue iniziando con `RICHIESTA REVISIONE PIANO:`: [ripianifica.yml](.github/workflows/ripianifica.yml) genera la versione successiva. Se è corretto, il **PM** commenta con due righe distinte `APPROVAZIONE PM:` e `File autorizzati:` (max 12 percorsi esatti), *dopo l'ultimo piano*.
-3. Il **TM responsabile con Write** rimuove `fase:piano` e aggiunge `fase:implementazione` sulla Issue: [implementa.yml](.github/workflows/implementa.yml) verifica l'approvazione PM, modifica soltanto i file consentiti, crea branch e Draft PR collegata con `Closes #N`. L'attivazione e la verifica restano separate: il TM non puo approvare il proprio piano al posto del PM.
-4. Il TM apre la **Draft PR**, legge `Files changed`, verifica il collegamento alla Issue e applica `fase:test` alla **PR**, non alla Issue. [test.yml](.github/workflows/test.yml) produce test indipendenti dai Test Frame reali per il codice applicativo; per le PR soltanto documentali registra `N/A` motivato. Il TM controlla report, SHA e CI.
-5. Se emerge un errore, il TM lo segnala al PM. Solo il **PM** commenta la Draft PR iniziando con `RICHIESTA CORREZIONE PM:`. [correzione.yml](.github/workflows/correzione.yml) modifica lo stesso branch senza ampliare l'ambito. Il TM rimuove e riaggiunge `fase:test` alla PR per eseguire test e CI sul nuovo commit.
-6. Dopo i controlli, il **TM** seleziona `Ready for review`: [revisione.yml](.github/workflows/revisione.yml) pubblica un report AI sullo SHA corrente. Un Code Owner umano diverso dall'autore esegue la review GitHub; serve inoltre l'approvazione di un PM.
-7. Il **PM** completa il merge soltanto dopo CI, Tester, Revisore e approvazioni umane validi. Il processo di merge riservato ai PM richiede anche una specifica restrizione GitHub di aggiornamento di `main`: CODEOWNERS e il controllo del piano, da soli, non limitano chi puo premere Merge.
+1. **PM** apre una Issue usando il template `Task per agente` e assegna un solo **TM responsabile**. L'assegnazione del PM attiva `piano.yml`, che genera il piano e applica `fase:piano`.
+2. **TM assegnato** controlla il piano. Può richiedere revisioni scrivendo sulla Issue `RICHIESTA REVISIONE PIANO:`; `ripianifica.yml` pubblica una nuova versione. Quando il piano è corretto, il TM commenta con due righe distinte `APPROVAZIONE TM:` e `File autorizzati:` (massimo 12 percorsi esatti).
+3. Il **TM assegnato** rimuove `fase:piano` e aggiunge `fase:implementazione` sulla Issue. `implementa.yml` verifica il TM e l'approvazione successiva all'ultimo piano, modifica soltanto i file autorizzati e crea una Draft PR collegata tramite `Closes #N`, registrando il TM responsabile.
+4. Il TM applica `fase:test` sulla **Draft PR**. Il Tester crea test indipendenti dai Test Frame reali (per i task documentali riporta N/A motivato). La CI verifica i controlli effettivamente disponibili.
+5. Se emergono errori, il TM assegnato o un TM revisore autorizzato scrive sulla Draft PR **`RICHIESTA CORREZIONE:`**, seguito da atteso, osservato e riferimento al difetto. `correzione.yml` corregge lo stesso branch, entro i file approvati e senza toccare i test. Il TM rimuove e riaggiunge `fase:test` per il retest. Dopo tre tentativi falliti, interviene una persona.
+6. Dopo un Tester riuscito il TM sceglie **Ready for review**. Il Revisore AI confronta diff e modelli, pubblica `ESITO_REVISIONE: PASS` oppure `CHANGES_REQUESTED`. Se trova difetti, si torna a Draft e al ciclo di correzione e retest.
+7. **Un altro TM** (Code Owner) effettua la review umana e approva il commit corrente. Le modifiche alla governance richiedono anche una review PM. Il TM responsabile non può autoapprovare il proprio lavoro, neanche se la PR è stata creata da un bot.
+8. **TM o PM autorizzato** può effettuare manualmente il merge solo dopo `repository-checks`, `governance-gate`, Tester, Revisore AI e review Code Owner positivi. GitHub chiude la Issue collegata e aggiorna la board.
 
-I testi delle Issue e delle PR sono dati non attendibili, non autorizzazioni per ignorare AGENTS.md. I limiti di tool e permessi dei workflow restano applicati. Approvazione, ambito e forma dei report hanno verifiche automatiche; la correttezza semantica dei risultati richiede sempre la review umana.
+## Approvazioni e configurazione GitHub
 
+Esempio del commento del **TM assegnato** nella Issue dopo l'ultimo piano:
 
-## Controllo finale delle Pull Request
+```text
+APPROVAZIONE TM: approvo il piano corrente per Issue #N.
+File autorizzati: backend/src/main/java/.../File.java
+```
 
-[governance.yml](.github/workflows/governance.yml) prepara il job `governance-gate`, che controlla le evidenze del Tester e del Revisore AI sul commit corrente e l'approvazione GitHub di almeno un PM diverso dall'autore. La CI `repository-checks` continua a controllare i file, i link, i manifest e le build/test quando disponibili. **Il gate diventa obbligatorio per il merge solo dopo che un admin lo aggiunge al Ruleset di `main` come required status check**, lasciando obbligatorio anche `repository-checks`.
+Il prefisso della correzione è soltanto **`RICHIESTA CORREZIONE:`**; il workflow verifica l'autore del commento, che deve essere un TM responsabile o revisore autorizzato. Non sono consentiti cambiamenti di requisiti o file fuori dall'ambito senza nuova pianificazione.
 
-Per impedire materialmente il merge ai TM con Write serve, oltre alle review, una regola GitHub separata `Restrict updates` su `main` che consenta il bypass soltanto al team `project-managers` **For pull requests only**. Mantenere la protezione PR/CI nel Ruleset principale per tutti e non utilizzare bypass per eludere i controlli. Le istruzioni e la procedura di collaudo sono in [Iterazioni agentiche](docs/agentic-workflow-iterazioni.md).
+`governance-gate` può essere rosso finché mancano report, review o controlli; viene rieseguito dopo la review umana. La CI verde prima del bootstrap dei moduli non prova il funzionamento applicativo.
+
+**Intervento amministrativo ancora necessario:** il Ruleset attivo `PM-only merge - NeighborCare` impedisce il merge ai TM. È necessario disabilitarlo o adattarlo, mantenendo invece obbligatori tutti i controlli del Ruleset `Protect main - NeighborCare`. I workflow YAML non possono modificare questa impostazione.
 
 ## CI e prerequisiti
 
@@ -37,9 +44,9 @@ Per impedire materialmente il merge ai TM con Write serve, oltre alle review, un
 
 Frontend e backend non sono inizializzati: nessuna build o esecuzione di test applicativi viene simulata. Il bootstrap approvato dovrà inserire `backend/pom.xml`, `backend/.java-version`, `frontend/package.json`, `frontend/package-lock.json`, `frontend/.nvmrc` e script npm `build` e `test:ci` approvati dal team (il comando `test:ci` deve terminare senza watch mode). Fino ad allora una CI verde certifica la governance, non il funzionamento dell'applicazione.
 
-Il PM verifica in GitHub: accessi Write, label `task-agente`, `fase:piano`, `fase:implementazione`, `fase:test`, secret `COPILOT_GITHUB_TOKEN`, permessi per creare PR e Ruleset che richieda 1 approvazione umana, Code Owner review e lo status check `repository-checks`. Per autorizzare il secondo PM nell'Implementatore impostare la variabile repository `NEIGHBORCARE_SECOND_PM_LOGIN` con il suo login GitHub verificato. Non abilitare API AI esterne o spesa extra; verificare idoneità e quote Copilot/Actions. Le PR del bot possono richiedere un'azione umana per avviare altri workflow.
+Il PM verifica in GitHub: accessi Write, label `task-agente`, `fase:piano`, `fase:implementazione`, `fase:test`, secret `COPILOT_GITHUB_TOKEN`, permessi per creare PR e Ruleset che richieda 1 approvazione umana, Code Owner review e lo status check `repository-checks`. Per riconoscere il secondo PM che apre e assegna le Issue impostare la variabile repository `NEIGHBORCARE_SECOND_PM_LOGIN` con il suo login GitHub verificato. Non abilitare API AI esterne o spesa extra; verificare idoneità e quote Copilot/Actions. Le PR del bot possono richiedere un'azione umana per avviare altri workflow.
 
-Per approvare un piano, il PM pubblica un commento contenente una riga `APPROVAZIONE PM: piano per Issue #N approvato.` e una riga `File autorizzati: README.md` (oppure un elenco preciso di percorsi separati da virgola; massimo 12). Il commento deve essere successivo al piano AI.
+Per approvare un piano, il TM assegnato usa `APPROVAZIONE TM:` e `File autorizzati:` dopo l'ultima versione pubblicata.
 
 Le modifiche alla pipeline vanno provate con un task documentale approvato prima di dichiarare funzionante il flusso completo. I PDF RAD/SDD restano fonti originali: non copiarne pagine in file Markdown. Questa semplificazione non esegue chiamate AI e non modifica PDF o template didattici.
 
