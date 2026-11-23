@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - name: Verifica piano, approvazione PM e ambito autorizzato
+      - name: Verifica piano, approvazione TM e ambito autorizzato
         uses: actions/github-script@v7
         env:
           SECOND_PM_LOGIN: ${{ vars.NEIGHBORCARE_SECOND_PM_LOGIN }}
@@ -37,38 +37,41 @@ jobs:
             if (issue.state !== 'open' || !issue.labels.some(l=>l.name==='fase:implementazione')) {
               core.setFailed('Issue o fase non valida.'); return;
             }
+            if (issue.assignees.length!==1 ||
+                issue.assignees[0].login.toLowerCase()!==(context.actor||'').toLowerCase()) {
+              core.setFailed('Solo il TM assegnato puo avviare l Implementatore.'); return;
+            }
             const comments = await github.paginate(github.rest.issues.listComments,{
               ...context.repo, issue_number:n, per_page:100
             });
             const plan = comments.filter(c=>c.user?.login === 'github-actions[bot]' &&
               (c.body||'').startsWith('## Piano proposto dal Pianificatore AI')).at(-1);
             if (!plan) { core.setFailed('Piano AI assente: fermare l implementazione.'); return; }
-            // Aggiornare questo elenco SOLO dopo avere verificato i login GitHub degli altri PM.
-            const pmLogins = ['antonio-caiazzo', (process.env.SECOND_PM_LOGIN||'').toLowerCase()].filter(Boolean);
+            const assignedTm=issue.assignees[0].login.toLowerCase();
             const unresolvedFeedback = comments.some(c =>
-              pmLogins.includes((c.user?.login||'').toLowerCase()) &&
+              (c.user?.login||'').toLowerCase()===assignedTm &&
               c.created_at > plan.created_at &&
               /^RICHIESTA REVISIONE PIANO:/m.test(c.body||''));
             if (unresolvedFeedback) {
-              core.setFailed('Il PM ha richiesto modifiche al piano: attendere una nuova versione e approvazione.');
+              core.setFailed('Il TM ha richiesto modifiche al piano: attendere una nuova versione e approvazione.');
               return;
             }
             const approvals = comments.filter(c =>
-              pmLogins.includes((c.user?.login||'').toLowerCase()) &&
+              (c.user?.login||'').toLowerCase()===assignedTm &&
               c.created_at > plan.created_at &&
-              /^APPROVAZIONE PM:/m.test(c.body||'') &&
+              /^APPROVAZIONE TM:/m.test(c.body||'') &&
               /^File autorizzati:/m.test(c.body||'')
             );
             const approval = approvals.at(-1);
             if (!approval) {
-              core.setFailed('Manca approvazione esplicita successiva al piano, firmata da un PM autorizzato.');
+              core.setFailed('Manca approvazione esplicita successiva al piano, firmata dal TM assegnato.');
               return;
             }
             const {data: approvalPerm} = await github.rest.repos.getCollaboratorPermissionLevel({
               ...context.repo, username:approval.user.login
             });
             if (!['write','maintain','admin'].includes(approvalPerm.permission)) {
-              core.setFailed('Il PM che ha approvato non ha piu accesso Write.'); return;
+              core.setFailed('Il TM che ha approvato non ha piu accesso Write.'); return;
             }
             const match = (approval.body||'').match(/^File autorizzati:\s*(.+)$/m);
             const allowed = (match?.[1]||'').split(',').map(s=>s.trim()).filter(Boolean);
@@ -95,7 +98,7 @@ jobs:
             } catch (err) { if (err.status !== 404) throw err; }
             fs.writeFileSync(path.join(process.env.RUNNER_TEMP,'allowed_files.txt'),
               allowed.join('\n')+'\n',{mode:0o600});
-            core.notice('Piano e approvazione PM verificati. Ambito congelato a '+allowed.length+' file.');
+            core.notice('Piano e approvazione TM verificati. Ambito congelato a '+allowed.length+' file.');
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -220,7 +223,9 @@ jobs:
             commit -m "Issue #${ISSUE_NUMBER}: implement approved plan"
           gh auth setup-git
           git push origin "HEAD:refs/heads/agent/issue-${ISSUE_NUMBER}-implementazione"
-          { printf 'Closes #%s\n\n' "$ISSUE_NUMBER"; cat "$RUNNER_TEMP/report.md"; } > "$RUNNER_TEMP/pr.md"
+          ASSIGNED_TM="$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER" --jq '.assignee.login')"
+          test -n "$ASSIGNED_TM"
+          { printf 'Closes #%s\nTM responsabile: @%s\n\n' "$ISSUE_NUMBER" "$ASSIGNED_TM"; cat "$RUNNER_TEMP/report.md"; } > "$RUNNER_TEMP/pr.md"
           gh pr create --repo "$GITHUB_REPOSITORY" --base main \
             --head "agent/issue-${ISSUE_NUMBER}-implementazione" --draft \
             --title "[AGENTE] Issue #${ISSUE_NUMBER}" --body-file "$RUNNER_TEMP/pr.md"
