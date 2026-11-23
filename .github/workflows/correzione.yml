@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Autorizza correzione TM, ambito e massimo tre tentativi
         id: guard
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs=require('fs'),path=require('path');
@@ -102,13 +102,13 @@ jobs:
             core.setOutput('pr_sha',pr.head.sha);
             core.setOutput('issue_number',String(issueNumber));
             core.notice('Assegnatario autorizzato, branch e ambito originale verificati.');
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: ${{ steps.guard.outputs.skip == 'false' }}
         with:
           ref: ${{ steps.guard.outputs.pr_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: ${{ steps.guard.outputs.skip == 'false' }}
         with:
           node-version: '22'
@@ -185,14 +185,15 @@ jobs:
                 echo "::error::File protetto, test o generato non modificabile: $file"; exit 1 ;;
             esac
           done < <(git diff --cached --name-only -z)
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         if: ${{ steps.guard.outputs.skip == 'false' && hashFiles('backend/pom.xml') != '' }}
         with:
           distribution: temurin
+          problem-matcher: true
           java-version-file: backend/.java-version
           cache: maven
           cache-dependency-path: backend/pom.xml
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: ${{ steps.guard.outputs.skip == 'false' && hashFiles('frontend/package.json') != '' }}
         with:
           node-version-file: frontend/.nvmrc
