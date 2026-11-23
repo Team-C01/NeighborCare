@@ -8,6 +8,7 @@
 - **Merge:** manuale da TM o PM autorizzati, soltanto con tutti i controlli verdi; nessun auto-merge.
 - La PR registra il TM autorizzante e la lista degli assegnatari. Non riassegnare la Issue dopo l'autorizzazione; per modifiche di responsabilita aprire un nuovo task.
 - `NEIGHBORCARE_SECOND_PM_LOGIN` identifica il secondo PM per l'avvio del Pianificatore.
+- **Collaudo PM isolato:** soltanto per una Issue creata da un PM, con titolo che include esattamente `[SIMULAZIONE PM]`, il PM autore puo essere **l'unico assegnatario** e svolgere temporaneamente i passaggi normalmente riservati ai TM. La label `fase:piano` resta manuale. Questa eccezione non vale per i task ordinari e non elimina la review umana indipendente. **La PR di simulazione NON deve essere mergiata**: dopo la prova va chiusa ed eliminato il branch.
 
 ## Contesto
 
