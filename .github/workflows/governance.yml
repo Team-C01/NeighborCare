@@ -34,7 +34,7 @@ jobs:
             if (pr.state!=='open' || pr.draft) problems.push('La PR deve essere aperta e Ready for review.');
             if (pr.base.ref!=='main' || pr.head.repo?.full_name!==context.repo.owner+'/'+context.repo.repo)
               problems.push('La PR deve essere interna e destinata a main.');
-            
+
             const linked=(pr.body||'').match(/\b(?:Closes|Fixes)\s+#(\d+)\b/i);
             const frozen=(pr.body||'').match(/^TM responsabile: @([A-Za-z0-9-]+)$/m)?.[1]?.toLowerCase();
             let responsible='';
@@ -78,7 +78,7 @@ jobs:
               return;
             }
             const comments=await github.paginate(github.rest.issues.listComments,{...context.repo,issue_number:prNumber,per_page:100});
-            
+
             const testerReport=comments.filter(c=>{
               if (c.user?.login!=='github-actions[bot]') return false;
               const b=c.body||'';
@@ -105,7 +105,7 @@ jobs:
                 }
               }
             }
-            
+
             const reviewerReport=comments.filter(c=>c.user?.login==='github-actions[bot]' &&
               (c.body||'').startsWith('## Revisione AI — PR #'+prNumber) &&
               (c.body||'').includes('Commit esaminato: '+sha)).at(-1);
@@ -122,7 +122,7 @@ jobs:
               r.status==='completed' && r.conclusion==='success'
             );
             if (!reviewerRun) problems.push('Manca una run Revisore riuscita sul commit corrente.');
-            
+
             const {data:reviews}=await github.rest.pulls.listReviews({...context.repo,pull_number:prNumber,per_page:100});
             const latest=new Map();
             for (const review of reviews) {
