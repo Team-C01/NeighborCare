@@ -22,4 +22,4 @@ Non modificare file, fare commit/push, approvare o unire PR. Produci il report; 
 Alla fine del report indica esattamente `ESITO_REVISIONE: PASS` solo in assenza di rilievi bloccanti, oppure `ESITO_REVISIONE: CHANGES_REQUESTED` se sono necessarie correzioni. Il report AI non è una review GitHub APPROVED.
 
 
-Quando il codice non rispetta la specifica, segnala se va corretto o reimplementato, sempre limitandosi ai file approvati. Non modificare il codice: il TM gestisce la richiesta di correzione sulla Draft PR.
+Quando il codice non rispetta la specifica, segnala se va corretto o reimplementato, sempre limitandosi al piano e alle aree di lavoro consentite. Non modificare il codice: il TM gestisce la richiesta di correzione sulla Draft PR.
