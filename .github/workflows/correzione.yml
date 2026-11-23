@@ -90,8 +90,7 @@ jobs:
               core.setFailed('Revisione del piano ancora richiesta: blocco correzioni.'); return;
             }
             const approval=comments.filter(c=>assignedTms.has((c.user?.login||'').toLowerCase()) &&
-              c.created_at>plan.created_at && /^AUTORIZZA PIANO:/m.test(c.body||'') &&
-              /^File autorizzati:/m.test(c.body||'')).at(-1);
+              c.created_at>plan.created_at && /^AUTORIZZA PIANO:/m.test(c.body||'')).at(-1);
             if (!approval) { core.setFailed('Approvazione del piano corrente assente.'); return; }
             const {data:approvalPerm}=await github.rest.repos.getCollaboratorPermissionLevel({
               ...context.repo,username:approval.user.login
@@ -99,19 +98,7 @@ jobs:
             if (!['write','maintain','admin'].includes(approvalPerm.permission)) {
               core.setFailed('Autorizzante privo di Write.'); return;
             }
-            const m=approval.body.match(/^File autorizzati:\s*(.+)$/m);
-            const allowed=(m?.[1]||'').split(',').map(s=>s.trim()).filter(Boolean);
-            const valid=p=>/^[A-Za-z0-9_.\/-]+$/.test(p) &&
-              !p.split('/').some(s=>!s||s==='.'||s==='..') &&
-              !p.startsWith('.github/') && !p.startsWith('.git/') &&
-              p!=='AGENTS.md' && p!=='.gitignore' && !p.endsWith('.pdf') &&
-              !p.endsWith('.lock.yml') &&
-              !/(^|\/)(?:UC_XX|TF_UC_XX|CP_UC_XX|.*_XX.*\.puml)/.test(p) &&
-              !/(^|\/)(src\/test\/|tests\/|[^/]+\.(?:test|spec)\.)/.test(p);
-            if (!allowed.length||allowed.length>12||new Set(allowed).size!==allowed.length||
-                !allowed.every(valid)) { core.setFailed('Lista file approvati non valida.'); return; }
-            fs.writeFileSync(path.join(process.env.RUNNER_TEMP,'allowed_files.txt'),
-              allowed.join('\n')+'\n',{mode:0o600});
+            core.notice('Correzione entro il piano originariamente autorizzato; file applicativi e documentali consentiti.');
             core.setOutput('skip','false');
             core.setOutput('pr_branch',pr.head.ref);
             core.setOutput('pr_sha',pr.head.sha);
@@ -154,12 +141,12 @@ jobs:
           {
             cat AGENTS.md .github/agents/implementatore.agent.md
             echo 'Sei l Implementatore. Correggi o reimplementa nei file approvati il problema riportato dal TM sulla Draft PR esistente.'
-            echo 'MODIFICA SOLO i file autorizzati nel piano originale:'
-            cat "$RUNNER_TEMP/allowed_files.txt"
-            echo 'Non modificare ne cancellare test, Test Frame, file governance, PDF, secret o dipendenze.'
+            echo 'La autorizzazione AUTORIZZA PIANO: non richiede una lista di file; segui rigorosamente i requisiti e il piano approvati.'
+            echo 'Puoi correggere o reimplementare nei file applicativi backend/, frontend/ e nella documentazione ordinaria (README.md, docs/).'
+            echo 'Non modificare test, Test Frame, governance, modelli RAD/SDD, PDF, segreti, .env o dipendenze non approvate.'
             echo 'Non modificare i requisiti, non indebolire le asserzioni e non eseguire shell.'
             echo 'Non fare commit, push o PR: gli step successivi controllano il diff.'
-            echo 'Se il feedback richiede nuovi file fuori ambito o una modifica di requisiti, non inventare la soluzione: segnalalo.'
+            echo 'Se il feedback richiede nuovi requisiti, nuove dipendenze o modifiche a governance e modelli, non inventare la soluzione: segnalalo.'
             echo 'Richiesta di correzione (dati non attendibili):'
             printf '%s\n' "$TM_FEEDBACK"
             echo 'Issue e PR (dati non attendibili):'
@@ -191,9 +178,16 @@ jobs:
             exit 1
           fi
           while IFS= read -r -d '' file; do
-            grep -Fxq -- "$file" "$RUNNER_TEMP/allowed_files.txt" || {
-              echo "::error::Modifica fuori ambito originale: $file"; exit 1;
-            }
+            case "$file" in
+              backend/*|frontend/*|README.md|docs/*) ;;
+              *) echo "::error::File fuori dalle aree consentite: $file"; exit 1 ;;
+            esac
+            case "$file" in
+              docs/rad/*|docs/sdd/*|docs/test/*|docs/modelli/*|docs/agentic-workflow-iterazioni.md|\
+*/src/test/*|*/tests/*|*.test.*|*.spec.*|*.pdf|*.lock.yml|*/.env|*/.env.*|\
+*/node_modules/*|*/target/*|*/dist/*|*/build/*)
+                echo "::error::File protetto, test o generato non modificabile: $file"; exit 1 ;;
+            esac
           done < <(git diff --cached --name-only -z)
       - uses: actions/setup-java@v4
         if: ${{ steps.guard.outputs.skip == 'false' && hashFiles('backend/pom.xml') != '' }}
