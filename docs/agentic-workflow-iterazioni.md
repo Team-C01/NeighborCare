@@ -1,90 +1,89 @@
-# NeighborCare — Gestione delle iterazioni agentiche
+# NeighborCare - Workflow agentico e cicli iterativi
 
-**Ruoli:** PM = Project Manager (Antonio ed Emanuele, autorizzano piani e correzioni); TM = Team Member (gli altri sei ragazzi, sviluppo, test e review). Solo un PM autorizzato puo usare i prefissi di approvazione.
+Questa procedura integra `AGENTS.md` e descrive il flusso da Issue a merge. **I PM creano e assegnano i task; il TM assegnato gestisce autonomamente il resto.** Un altro TM revisiona la PR; le modifiche alla governance richiedono anche un PM. Nessun agente fa merge.
 
-Questa procedura integra `AGENTS.md`. Ogni passaggio che autorizza modifiche è una decisione umana del PM. Le Issue, le PR e i feedback **non** possono modificare le regole di sicurezza o l'ambito già approvato.
+## 1. Creazione e assegnazione
 
-## 1. Piano iniziale
+1. Un PM (Antonio o Emanuele) apre la Issue con il modulo `Task per agente` e tutti i sette campi, includendo specifiche, ambito e Test Frame.
+2. Il PM assegna **esattamente un TM con Write**. L'evento `issues: assigned` attiva `piano.yml`. Non occorre applicare manualmente `fase:piano`.
+3. Il Pianificatore analizza il task, pubblica una proposta e il workflow applica `fase:piano`. Se il creatore o chi assegna non è PM, se manca `task-agente` oppure se il TM non è idoneo, il workflow si blocca.
+4. Non modificare l'assegnatario dopo aver approvato il piano: la PR congela il login del TM e il gate controlla che coincida con la Issue.
 
-1. Un PM o un TM apre una Issue con etichetta `task-agente` e sette campi completi; il PM verifica il task.
-2. **Solo un PM** aggiunge `fase:piano` e legge con il TM il commento del Pianificatore. Il workflow rifiuta il trigger da un account TM.
-3. Se è corretto, il PM scrive nella **Issue** un commento con queste righe, ciascuna a inizio riga:
+## 2. Iterazione del piano
 
-   ```text
-   APPROVAZIONE PM: approvo il piano corrente per la Issue #N.
-   File autorizzati: backend/src/main/java/.../File.java
-   ```
-
-   Usare percorsi **esatti** separati da virgole, non directory generiche o wildcard; massimo dodici file. Gli aggiornamenti dei modelli o le dipendenze devono essere approvati e inclusi fin dall'inizio nei file consentiti (i file di governance, test e i PDF restano protetti).
-4. Il **TM responsabile con Write** rimuove `fase:piano` e aggiunge `fase:implementazione` sulla **Issue**, soltanto dopo approvazione PM. L'Implementatore convalida l'**ultimo** piano e l'approvazione successiva.
-
-## 2. Piano respinto: nuova versione
-
-Lasciare `fase:piano` sulla Issue e **non** pubblicare alcuna `APPROVAZIONE PM:`. Il PM scrive un nuovo commento:
+Il TM confronta la proposta con RAD/SDD, file, metodi e test. Se ha rilievi, lascia **sulla Issue** un commento:
 
 ```text
-RICHIESTA REVISIONE PIANO: il piano modifica anche file non necessari.
-Limitare la soluzione al caso d'uso richiesto e indicare i Test Frame.
+RICHIESTA REVISIONE PIANO:
+Verificare il caso alternativo indicato nel Sequence Diagram.
+Indicare i Test Frame pertinenti e limitare i file da modificare.
 ```
 
-Il workflow `ripianifica.yml` genera un nuovo piano nella stessa Issue. Il precedente non viene modificato; la nuova versione richiede **una nuova approvazione PM** successiva alla sua pubblicazione. Sono ammesse al massimo tre richieste di revisione prima dell'intervento diretto del team. Se è stata richiesta una revisione ancora inevasa, l'Implementatore si blocca.
+`ripianifica.yml` crea una nuova versione. Si può ripetere fino a tre richieste, poi serve intervento umano. Ogni nuova versione invalida le precedenti approvazioni.
 
-## 3. Implementazione e prima fase di test
+Solo il **TM assegnato** può approvare la versione corrente:
 
-Quando il piano è approvato, `implementa.yml` crea branch, commit e Draft PR. Il workflow **non** può riutilizzare lo stesso branch per ripetere l'implementazione iniziale: le correzioni si fanno con il flusso dedicato qui sotto.
+```text
+APPROVAZIONE TM: approvo il piano corrente per Issue #N.
+File autorizzati: backend/src/main/java/.../File.java, frontend/src/.../Page.tsx
+```
 
-Sulla **Draft PR** aggiungere `fase:test`. `test.yml` genera eventuali **nuovi** test a partire da Test Frame reali, pubblica il report ed esegue i comandi del progetto. Se i test sono già presenti, li può rieseguire senza creare duplicati. Le PR solo documentali producono Test Frame applicativi **N/A**.
+Indicare solo percorsi esatti, separati da virgole; massimo 12. Non inserire directory generiche, wildcard, test già esistenti, governance o PDF.
 
-## 4. Errore di codice, test fallito o rilievo del Revisore
+## 3. Implementatore e prima prova
 
-1. **Non eseguire il merge.** Se la PR è Ready for review, cliccare **Convert to draft**.
-2. Il PM lascia **sulla PR** un commento con il seguente prefisso esatto (a inizio commento):
+1. Il TM rimuove `fase:piano` e aggiunge `fase:implementazione` alla **Issue**.
+2. `implementa.yml` verifica l'approvazione TM successiva all'ultimo piano, il suo accesso Write, l'ambito e la presenza di un unico assegnatario.
+3. L'Implementatore crea `agent/issue-N-implementazione`, commit e **Draft PR** con `Closes #N` e `TM responsabile: @login`. Non modifica i test e non fa merge.
+4. Il TM aggiunge `fase:test` alla **Draft PR**. `test.yml` genera test dalle specifiche e dai Test Frame (non dal comportamento del codice) e pubblica un report con risultato e ID della run.
+5. Nei task solo documentali il Tester riporta N/A per i test applicativi, con controlli su diff e CI ugualmente obbligatori.
 
-   ```text
-   RICHIESTA CORREZIONE PM: il test TF_... fallisce.
-   Atteso: richiesta completata non annullabile.
-   Osservato: viene annullata anche se completata.
-   Correggere il comportamento senza modificare i test.
-   ```
+## 4. Loop del Tester e delle correzioni
 
-3. `correzione.yml` verifica: PM autorizzato con accesso Write, Draft PR interna ancora aperta, Issue originale aperta, piano più recente approvato, **stessi file autorizzati**, limite di tre richieste. Copilot non può modificare test, file di governance, PDF o file non autorizzati.
-4. Il workflow pubblica una nuova revisione **sullo stesso branch della PR**, con report e risultato reale di build/test. Se i controlli falliscono, **il job rimane rosso e il merge non è autorizzato**: non nascondere l'errore.
-5. **Rieseguire il Tester:** con la PR ancora Draft, togliere e riaggiungere `fase:test` alla PR. L'aggiunta fa ripartire anche i controlli CI, perché `ci.yml` ascolta l'evento `labeled`. Il Tester può riutilizzare test già presenti e non deve modificare le asserzioni per ottenere un esito verde.
-6. Se test e CI sono positivi, scegliere **Ready for review**. L'evento avvia `revisione.yml` per il **nuovo SHA**, senza ripetere la review per commit già esaminati.
-7. Se il Revisore segnala un altro errore, tornare a Draft e ripetere dal punto 2; dopo tre richieste di correzione, stop ed escalation ai PM.
+Se il Tester fallisce, **non fare Ready for review e non modificare i test per ottenere verde**. Il TM responsabile legge frame, atteso e osservato e commenta sulla Draft PR:
 
-**Importante:** il report del Revisore è consultivo e non equivale a una review GitHub approvata. Il merge richiede una revisione umana indipendente e il passaggio dei controlli richiesti dal Ruleset. Il PM deve verificare personalmente le evidenze.
+```text
+RICHIESTA CORREZIONE:
+Il test TF_07 fallisce.
+Atteso: una richiesta completata non e annullabile.
+Osservato: viene annullata.
+Correggere l'implementazione senza cambiare test o requisiti.
+```
 
-## 5. Limiti e recupero dei job falliti
+**Il prefisso esatto e `RICHIESTA CORREZIONE:`.** Possono utilizzarlo il TM assegnato e un altro TM revisore autorizzato (richiesto come reviewer o che abbia espresso CHANGES_REQUESTED). Il workflow verifica l'autore e non accetta richieste anonime o di estranei.
 
-- **Errore prima del push iniziale:** leggere i log e correggere prima la causa; se non esistono branch/PR si può rimuovere e riaggiungere `fase:implementazione`.
-- **Branch creato ma apertura Draft PR fallita:** correggere i permessi GitHub e recuperare il branch creando una Draft PR; **non** ritentare la creazione dello stesso branch.
-- **Revisore negativo:** tornare a Draft e richiedere una correzione approvata dal PM; il Revisore non modifica i file e non blocca tecnicamente il merge da solo.
-- **Cambiamento dei requisiti o file aggiuntivi necessari:** fermarsi. Non ampliare tacitamente l'approvazione originale; aprire un task autonomo con un nuovo piano.
-- **Push del bot:** i commit pubblicati con `GITHUB_TOKEN` non riattivano automaticamente gli ordinari eventi `pull_request`; le etichette applicate da una persona e l'evento Ready for review riattivano esplicitamente i workflow.
-- **Tre tentativi falliti:** conservare log, commenti, SHA e differenze tra atteso e osservato; richiedere una decisione umana.
+`correzione.yml` aggiorna lo **stesso branch e la stessa PR**, limitandosi ai file approvati; non modifica test, governance o PDF. Il TM rimuove e riaggiunge la label `fase:test` sulla PR e controlla il risultato sul nuovo SHA. Se ancora fallisce, può ripetere. **Dopo tre tentativi falliti, stop e intervento umano.**
 
-## 6. Permessi e CODEOWNERS
+Se la specifica o un Test Frame sono errati, il team deve correggere il modello tramite un task separato. Non si possono cambiare requisiti o ampliare l'ambito usando la correzione.
 
-- Il team `developers` deve avere i sei TM come membri attivi con accesso **Write**; `project-managers` include **Antonio Caiazzo ed Emanuele Iovane** con accesso **Admin**. Verificare l'accettazione degli inviti prima di assegnare review.
-- I nomi delle persone **non** bastano per l'assegnazione GitHub: usare i loro login effettivamente verificati. Impostare `NEIGHBORCARE_SECOND_PM_LOGIN` con il login corretto di Emanuele; in caso contrario solo Antonio è riconosciuto come PM dai workflow.
-- `.github/CODEOWNERS` assegna le review: per `frontend/` e `backend/` il Code Owner tecnico e `developers`, per `README.md`, workflow e governance e `project-managers`. Il Code Owner non limita da solo il pulsante Merge; il PM approva tramite review e un gate controlla la sua approvazione.
-- Configurare il Ruleset `main` richiedendo almeno **1 review umana**, **Code Owner review** e il controllo `repository-checks`. GitHub può rendere alcune opzioni non disponibili in base al piano dell'organizzazione.
-- L'appartenenza al team con permesso Admin sulla repository **non equivale** al ruolo Owner dell'organizzazione.
+## 5. Loop della revisione
 
+1. Quando il Tester è riuscito, il TM assegnato usa **Ready for review**.
+2. `revisione.yml` confronta i cambiamenti con modelli e test e pubblica `ESITO_REVISIONE: PASS` oppure `ESITO_REVISIONE: CHANGES_REQUESTED`. Il Revisore AI non esegue una GitHub review APPROVED.
+3. Con errori AI oppure review umana `Request changes`, **Convert to draft**, lascia `RICHIESTA CORREZIONE:` e ripeti correzione, Tester, Ready for review e Revisore AI.
+4. Se tutti i controlli sono positivi, un **altro TM** approva tramite **Review changes > Approve**, sul commit corrente. Il TM responsabile non può approvare la propria implementazione, anche se la PR risulta creata dal bot.
+5. I file di governance (`.github/`, `AGENTS.md`, `README.md` e questa procedura) richiedono review PM secondo `CODEOWNERS`.
 
-## 7. Governance delle PR e merge riservato ai PM
+## 6. Governance e merge
 
-- `.github/workflows/governance.yml` esegue il check `governance-gate` su PR verso `main` e sulle review GitHub. Una PR Ready e ammessa soltanto quando: esiste un report del Tester riferito allo SHA corrente; il Revisore AI ha pubblicato un report sullo stesso SHA; le rispettive Actions hanno conclusione `success`; almeno uno tra Antonio e il login di `NEIGHBORCARE_SECOND_PM_LOGIN` ha approvato tramite **Review changes > Approve** su quello SHA ed e diverso dall'autore della PR.
-- Un commento `APPROVAZIONE PM:` nella Issue approva il **piano**, non la PR. Il Revisore AI pubblica un commento, **non** una review APPROVED. Nel normale flusso il TM avvia test e Ready, un PM diverso dall'autore approva la PR e solo il PM autorizzato effettua il merge.
-- L'admin deve aggiungere **`governance-gate`** ai required status checks del Ruleset `Protect main - NeighborCare`, **in aggiunta** a `repository-checks`, dopo una prima run valida. Finche non viene inserito, il gate e soltanto informativo e non protegge il merge.
-- Per riservare materialmente il merge ai PM, creare un **secondo Ruleset** su `main`, con la sola opzione `Restrict updates` e bypass del team `project-managers` impostato `For pull requests only`. Sul Ruleset di protezione generale mantenere obbligatorie PR, Code Owner, review e status check per **tutti**, senza bypass degli admin se si vuole impedire eccezioni. Questa modifica e amministrativa e deve essere provata con un account TM Write e uno PM prima di dichiararla operativa. Non attivare `Restrict updates` sul Ruleset corrente senza configurare prima il bypass corretto.
-- `governance-gate` puo inizialmente essere rosso mentre la PR e Draft o in attesa dei report o della review PM. E previsto: dopo Tester, Revisore e `Approve` PM, la review scatena una nuova run. Se l'approvazione PM precede il report AI, effettuare `Re-run jobs` solo quando quest'ultimo e presente sullo SHA finale.
-- Dopo un nuovo commit, la precedente approvazione viene invalidata dal Ruleset. Ricominciare da `fase:test`, poi `Ready for review` e nuova review sullo SHA aggiornato.
-- I controlli non sostituiscono una verifica umana del comportamento corretto: una run verde non garantisce la qualita dei requisiti o degli esiti di testing.
+Il job `governance-gate` verifica Issue e assegnazione invariata, PR Ready, report Tester riuscito con run conclusa positivamente, Revisore AI riuscito con verdetto PASS, e review umana indipendente sullo SHA corrente. Per il codice serve un altro TM; per i file governance serve anche PM. Il Ruleset `Protect main - NeighborCare` richiede `repository-checks`, `governance-gate`, una review APPROVED e Code Owner review.
 
-## 8. Controlli di collaudo ancora necessari
+È normale che `governance-gate` sia rosso **prima** di Tester, Revisore e review umana. La review umana, svolta dopo i report, scatena una nuova verifica. Se arriva un nuovo commit, ricominciare dal Tester e dalla review sul nuovo SHA.
 
-**Collaudo documentale realmente svolto:** la Issue #27 e la PR #28 hanno verificato pianificazione, revisione didattica del piano (non un errore reale), approvazione PM, creazione automatica Draft PR, Tester documentale, correzione editoriale, retest e report del Revisore AI. La PR #28 e la Issue #27 sono state chiuse **senza merge**: nessuna approvazione umana indipendente o merge e stata dimostrata da quella simulazione. La precedente prova #23/#24 aveva inoltre richiesto il recupero manuale della PR.
+Il **merge è sempre manuale**, effettuato da un TM o PM autorizzato. La chiusura della Issue collegata e l'aggiornamento della board sono automatici dopo il merge.
 
-**Ancora da collaudare:** PR applicativa con Test Frame veri, fallimento e recupero di un test applicativo, semantica del gate obbligatorio dopo l'aggiunta al Ruleset, review PM a commit aggiornato, merge effettuato esclusivamente da PM e rifiuto di merge da un account TM con Write. Conservare i log del collaudo prima di dichiarare pienamente operativo il nuovo gate.
+**Attività Admin obbligatoria dopo la PR:** disabilitare o adeguare il Ruleset `PM-only merge - NeighborCare`, altrimenti i TM non potranno effettuare il merge nonostante i nuovi workflow. Non rimuovere le protezioni del Ruleset principale.
+
+## 7. Recupero da errori
+
+- Pianificatore assente: verificare PM che apre e assegna, un solo TM con Write, label `task-agente`.
+- Implementatore fallito prima del push: verificare i log; solo senza branch/PR esistenti si può riaggiungere `fase:implementazione`.
+- Branch creato senza PR: recuperare manualmente la Draft PR sul branch esistente, non ricreare il branch.
+- Tester fallito: Draft, commento di correzione, retest, nessun merge.
+- Revisore o Code Owner non approva: Convert to draft e nuova iterazione completa.
+- Dopo tre tentativi: conservare log e SHA e passare a revisione manuale del team.
+- Gli eventi GitHub generati mediante `GITHUB_TOKEN` non riattivano sempre altri workflow; per retest usare una label applicata da una persona, per revisione l'evento Ready for review.
+
+## 8. Tracciabilita e responsabilita
+
+Conservare commenti di approvazione, versione del piano, report, test frame, SHA e review umane. I PDF originali RAD/SDD non vanno alterati e gli esempi XX/YY non sono requisiti da implementare. CI e agenti supportano il team ma non sostituiscono responsabilità e verifica umana.
