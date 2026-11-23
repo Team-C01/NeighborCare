@@ -18,10 +18,9 @@ Controllare il Sequence Diagram e i Test Frame pertinenti.
 
 ```text
 AUTORIZZA PIANO: autorizzo l'ultima versione del piano.
-File autorizzati: backend/src/main/java/.../ChatService.java
 ```
 
-Massimo 12 percorsi **esatti** di file; una autorizzazione precedente all'ultimo piano non vale. Il limite di tre ripianificazioni richiede una verifica umana in caso di stallo.
+Non occorre inserire l'elenco dei file. L'agente sceglie i file necessari nei confini applicativi/documentali e secondo la funzionalita prevista dal piano. Una autorizzazione precedente all'ultimo piano non vale. Il limite di tre ripianificazioni richiede una verifica umana in caso di stallo.
 
 ## Prima implementazione
 
@@ -41,13 +40,13 @@ Correggere il comportamento senza modificare i test.
 
 La stessa richiesta puo dire **Reimplementare completamente il metodo/la classe**, purche entro i file e i requisiti autorizzati. `correzione.yml` aggiorna lo stesso branch e la stessa PR, pubblicando un nuovo commit. Per i nuovi test il TM rimuove e riaggiunge `fase:test`; controllare nuovamente tutti i test pertinenti.
 
-Tre tentativi AI consecutivi senza test superati richiedono intervento umano. Un nuovo ciclo puo iniziare quando, dopo test superati, emerge un rilievo ulteriore in review. Se e sbagliato il Test Frame oppure servono file/requisiti fuori ambito, fermarsi e aprire un altro task, senza indebolire i test.
+Tre tentativi AI consecutivi senza test superati richiedono intervento umano. Un nuovo ciclo puo iniziare quando, dopo test superati, emerge un rilievo ulteriore in review. Se e sbagliato il Test Frame oppure servono requisiti, dipendenze o aree protette fuori ambito, fermarsi e aprire un altro task, senza indebolire i test.
 
 ## Revisore AI e review umana
 
 Dopo Tester positivo, un TM assegnato clicca **Ready for review**. `revisione.yml` valuta diff e modelli e pubblica `ESITO_REVISIONE: PASS` o `CHANGES_REQUESTED`.
 
-Se AI o persona trovano un problema: **Convert to draft**, commento `RICHIESTA CORREZIONE:`, correzione o reimplementazione nei file approvati, retest con `fase:test`, nuovo Ready for review e nuovo report AI. La PR non viene ricreata e il Revisore AI non modifica codice.
+Se AI o persona trovano un problema: **Convert to draft**, commento `RICHIESTA CORREZIONE:`, correzione o reimplementazione nelle aree di lavoro consentite, retest con `fase:test`, nuovo Ready for review e nuovo report AI. La PR non viene ricreata e il Revisore AI non modifica codice.
 
 Un revisore umano con Write, **non tra gli assegnatari**, approva sullo SHA corrente con Review changes > Approve. Puo essere un TM o Emanuele come PM, ma nessun PM e richiesto obbligatoriamente. Dopo un nuovo commit, invalidare le vecchie approvazioni.
 
