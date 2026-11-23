@@ -53,7 +53,7 @@ Inventare specifiche, alterare PDF o esempi didattici XX/YY, indebolire test, in
 
 ## Governance delle Pull Request
 
-- `governance-gate` verifica Issue, assegnatari tracciati, Tester e Revisore AI sullo SHA corrente e review umana indipendente da parte di un collaboratore Write non assegnato, senza distinzione PM/TM.
+- `governance-gate` si avvia soltanto dopo una review umana `Approve` o `Request changes`, oppure la revoca di una review, **non** su apertura/aggiornamento Draft PR o Ready for review. Fino a quel momento il required check rimane `Expected` e blocca il merge. La review umana `Approve` va fatta solo dopo Tester riuscito e Revisore AI con `ESITO_REVISIONE: PASS` sul commit corrente. Il gate verifica Issue, assegnatari tracciati, Tester, Revisore e approvazione indipendente Write sullo SHA attuale, senza distinzione PM/TM.
 - Il Ruleset `Protect main - NeighborCare` richiede `repository-checks`, `governance-gate`, review APPROVED e Code Owner review. La bypass list Admin non va utilizzata durante i test.
 - Dopo un nuovo commit ripetere test, Revisore e review; i risultati vecchi non autorizzano il merge.
 
