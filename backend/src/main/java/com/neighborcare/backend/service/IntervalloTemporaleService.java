@@ -17,6 +17,10 @@ public class IntervalloTemporaleService {
             return false;
         }
 
-        return inizio1.isBefore(fine2) && inizio2.isBefore(fine1);
+        boolean primoIniziaPrimaDellaFineDelSecondo = inizio1.isBefore(fine2);
+        boolean secondoIniziaPrimaDellaFineDelPrimo = inizio2.isBefore(fine1);
+
+        return primoIniziaPrimaDellaFineDelSecondo
+                && secondoIniziaPrimaDellaFineDelPrimo;
     }
 }
