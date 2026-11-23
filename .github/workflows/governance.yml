@@ -19,142 +19,112 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Verifica PM, Tester e Revisore sul commit corrente
+      - name: Verifica TM responsabile, Tester, Revisore e review indipendente sul commit corrente
         uses: actions/github-script@v7
         env:
           SECOND_PM_LOGIN: ${{ vars.NEIGHBORCARE_SECOND_PM_LOGIN }}
         with:
           script: |
-            // Check deterministico: nessuna chiamata AI e nessuna modifica ai file.
-            // Il Ruleset deve richiedere esplicitamente "governance-gate".
-            const prNumber = context.payload.pull_request?.number;
-            if (!prNumber) { core.setFailed('Evento privo di Pull Request.'); return; }
-            const {data: pr} = await github.rest.pulls.get({
-              ...context.repo, pull_number: prNumber
-            });
-            const sha = pr.head.sha;
-            const problems = [];
-            if (pr.state !== 'open' || pr.draft) {
-              problems.push('La PR deve essere aperta e Ready for review.');
+            const prNumber=context.payload.pull_request?.number;
+            if (!prNumber) { core.setFailed('Evento senza Pull Request.'); return; }
+            const {data:pr}=await github.rest.pulls.get({...context.repo,pull_number:prNumber});
+            const sha=pr.head.sha;
+            const problems=[];
+            if (pr.state!=='open' || pr.draft) problems.push('La PR deve essere aperta e Ready for review.');
+            if (pr.base.ref!=='main' || pr.head.repo?.full_name!==context.repo.owner+'/'+context.repo.repo)
+              problems.push('La PR deve essere interna e destinata a main.');
+            
+            const linked=(pr.body||'').match(/\b(?:Closes|Fixes)\s+#(\d+)\b/i);
+            const frozen=(pr.body||'').match(/^TM responsabile: @([A-Za-z0-9-]+)$/m)?.[1]?.toLowerCase();
+            let responsible='';
+            if (!linked || !frozen) {
+              problems.push('Mancano Closes #Issue o TM responsabile nella PR.');
+            } else {
+              const {data:issue}=await github.rest.issues.get({...context.repo,issue_number:Number(linked[1])});
+              if (issue.state!=='open' || issue.assignees.length!==1) {
+                problems.push('Issue originale chiusa o senza un solo TM assegnato.');
+              } else {
+                responsible=issue.assignees[0].login.toLowerCase();
+                if (responsible!==frozen) problems.push('Il TM assegnato non coincide con il responsabile registrato nella PR.');
+              }
             }
-            if (pr.base.ref !== 'main' ||
-                pr.head.repo?.full_name !== context.repo.owner + '/' + context.repo.repo) {
-              problems.push('Il gate supporta soltanto PR interne verso main.');
-            }
-            const {data: files} = await github.rest.pulls.listFiles({
-              ...context.repo, pull_number: prNumber, per_page: 100
-            });
-            if (!files.length || files.length > 80) {
-              problems.push('Diff vuota o maggiore di 80 file.');
-            }
-            const docsOnly = files.length > 0 && files.every(f => {
-              const path = f.filename;
-              return !path.endsWith('.pdf') &&
-                (path === 'README.md' || path === 'AGENTS.md' ||
-                 path === '.gitignore' || path.startsWith('.github/') ||
-                 path.startsWith('docs/'));
-            });
-
-            // Eccezione SOLO per il primo bootstrap di un modulo vuoto:
-            // richiede Reviewer AI, PM umano e CI; Tester applicativo N/A.
-            let bootstrap = !docsOnly && files.length > 0 &&
-              files.every(f => f.filename.startsWith('frontend/') ||
-                               f.filename.startsWith('backend/'));
-            if (bootstrap) {
-              const roots = [...new Set(files.map(f => f.filename.split('/')[0]))];
-              for (const root of roots) {
-                const manifest = root === 'frontend' ? 'frontend/package.json' : 'backend/pom.xml';
-                if (!files.some(f => f.filename === manifest && f.status === 'added')) {
-                  bootstrap = false; break;
-                }
+            const files=await github.paginate(github.rest.pulls.listFiles,{...context.repo,pull_number:prNumber,per_page:100});
+            if (!files.length || files.length>80) problems.push('Diff vuota o superiore a 80 file.');
+            const paths=files.map(f=>f.filename);
+            const protectedPath=p=>p==='AGENTS.md'||p==='README.md'||p==='.gitignore'||
+              p.startsWith('.github/')||p==='docs/agentic-workflow-iterazioni.md';
+            const needsPm=paths.some(protectedPath);
+            const needsTm=paths.some(p=>!protectedPath(p));
+            const comments=await github.paginate(github.rest.issues.listComments,{...context.repo,issue_number:prNumber,per_page:100});
+            
+            const testerReport=comments.filter(c=>{
+              if (c.user?.login!=='github-actions[bot]') return false;
+              const b=c.body||'';
+              return (b.startsWith('## Tester indipendente — verifica documentale') &&
+                      b.includes('Commit esaminato: '+sha)) ||
+                     (b.startsWith('## Tester indipendente — PR #'+prNumber) &&
+                      b.includes('Commit dopo il test: '+sha) &&
+                      /Risultato dei test automatici \(exit code\):\s*0\b/.test(b));
+            }).at(-1);
+            if (!testerReport) {
+              problems.push('Manca il report del Tester superato sul commit corrente.');
+            } else {
+              const id=(testerReport.body||'').match(/^Run Tester:\s*(\d+)\s*$/m)?.[1];
+              if (!id) {
+                problems.push('Report Tester privo di identificativo della run.');
+              } else {
                 try {
-                  await github.rest.repos.getContent({
-                    ...context.repo, path: manifest, ref: pr.base.sha
-                  });
-                  bootstrap = false; break;
+                  const {data:run}=await github.rest.actions.getWorkflowRun({...context.repo,run_id:Number(id)});
+                  if (run.name!=='Tester indipendente' || run.conclusion!=='success' ||
+                      run.head_branch!==pr.head.ref)
+                    problems.push('La run del Tester non e conclusa con successo sul branch della PR.');
                 } catch (error) {
-                  if (error.status !== 404) throw error;
+                  problems.push('Impossibile validare la run del Tester: '+error.message);
                 }
               }
             }
-
-            const linkedIssue = (pr.body || '').match(/\b(?:Closes|Fixes)\s+#(\d+)\b/i);
-            if (!docsOnly && !linkedIssue) {
-              problems.push('La PR applicativa deve collegare la Issue con Closes #N o Fixes #N.');
+            
+            const reviewerReport=comments.filter(c=>c.user?.login==='github-actions[bot]' &&
+              (c.body||'').startsWith('## Revisione AI — PR #'+prNumber) &&
+              (c.body||'').includes('Commit esaminato: '+sha)).at(-1);
+            if (!reviewerReport) {
+              problems.push('Manca il report del Revisore AI sul commit corrente.');
+            } else if (!/^ESITO_REVISIONE:\s*PASS\s*$/m.test(reviewerReport.body||'')) {
+              problems.push('Il Revisore AI ha richiesto modifiche: tornare a Draft e correggere.');
             }
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              ...context.repo, issue_number: prNumber, per_page: 100
+            const {data:workflowResult}=await github.rest.actions.listWorkflowRunsForRepo({
+              ...context.repo,branch:pr.head.ref,event:'pull_request',per_page:100
             });
-            const aiReport = comments.find(c =>
-              c.user?.login === 'github-actions[bot]' &&
-              (c.body || '').startsWith('## Revisione AI — PR #' + prNumber) &&
-              (c.body || '').includes('Commit esaminato: ' + sha)
+            const reviewerRun=(workflowResult.workflow_runs||[]).find(r=>
+              r.name==='Revisore' && r.head_sha===sha &&
+              r.status==='completed' && r.conclusion==='success'
             );
-            if (!aiReport) {
-              problems.push('Manca il report del Revisore AI sul commit ' + sha.slice(0, 12) + '.');
+            if (!reviewerRun) problems.push('Manca una run Revisore riuscita sul commit corrente.');
+            
+            const pmLogins=['antonio-caiazzo',(process.env.SECOND_PM_LOGIN||'').toLowerCase()].filter(Boolean);
+            const {data:reviews}=await github.rest.pulls.listReviews({...context.repo,pull_number:prNumber,per_page:100});
+            const latest=new Map();
+            for (const review of reviews) {
+              const login=(review.user?.login||'').toLowerCase();
+              if (login) latest.set(login,review);
             }
-
-            const testerReport = comments.find(c => {
-              if (c.user?.login !== 'github-actions[bot]') return false;
-              const body = c.body || '';
-              return (body.startsWith('## Tester indipendente — verifica documentale') &&
-                        body.includes('Commit esaminato: ' + sha)) ||
-                     (body.startsWith('## Tester indipendente — PR #' + prNumber) &&
-                        body.includes('Commit dopo il test: ' + sha) &&
-                        /Risultato dei test automatici \(exit code\):\s*0\b/.test(body));
-            });
-            if (!testerReport && !bootstrap) {
-              problems.push('Manca il Tester riuscito e riferito al commit corrente.');
+            let independentTm=false,pmReview=false;
+            for (const [login,review] of latest) {
+              if (review.state!=='APPROVED' || review.commit_id!==sha ||
+                  login===responsible || login==='github-actions[bot]' || login===(pr.user?.login||'').toLowerCase())
+                continue;
+              try {
+                const {data:perm}=await github.rest.repos.getCollaboratorPermissionLevel({
+                  ...context.repo,username:login
+                });
+                if (!['write','maintain','admin'].includes(perm.permission)) continue;
+                if (pmLogins.includes(login)) pmReview=true;
+                else independentTm=true;
+              } catch (error) { core.warning('Permessi revisore non verificabili: '+login); }
             }
-            if (bootstrap) {
-              core.notice('Primo bootstrap: Tester applicativo N/A; verificare build e test reali nella CI.');
-            }
-
-            const {data: workflowResult} = await github.rest.actions.listWorkflowRunsForRepo({
-              ...context.repo, branch: pr.head.ref, event: 'pull_request', per_page: 100
-            });
-            const runs = workflowResult.workflow_runs || [];
-            const reviewerRun = runs.find(r =>
-              r.name === 'Revisore' && r.head_sha === sha &&
-              r.status === 'completed' && r.conclusion === 'success'
-            );
-            if (!reviewerRun) {
-              problems.push('Non risulta una run Revisore riuscita sul commit corrente.');
-            }
-            if (!bootstrap && testerReport) {
-              const testerRun = runs.find(r =>
-                r.name === 'Tester indipendente' &&
-                r.status === 'completed' && r.conclusion === 'success' &&
-                Date.parse(r.updated_at) >= Date.parse(testerReport.created_at)
-              );
-              if (!testerRun) {
-                problems.push('Non risulta una run Tester riuscita per il report del commit corrente.');
-              }
-            }
-
-            const {data: reviewList} = await github.rest.pulls.listReviews({
-              ...context.repo, pull_number: prNumber, per_page: 100
-            });
-            const pmLogins = [
-              'antonio-caiazzo',
-              (process.env.SECOND_PM_LOGIN || '').trim().toLowerCase()
-            ].filter(Boolean);
-            const lastByReviewer = new Map();
-            for (const review of reviewList) {
-              const login = (review.user?.login || '').toLowerCase();
-              if (login) lastByReviewer.set(login, review);
-            }
-            const pmApproved = pmLogins.some(login => {
-              const review = lastByReviewer.get(login);
-              return login !== (pr.user?.login || '').toLowerCase() &&
-                review?.state === 'APPROVED' && review?.commit_id === sha;
-            });
-            if (!pmApproved) {
-              problems.push('Serve una review GitHub APPROVED di un PM diverso dall’autore, sullo SHA corrente.');
-            }
-
-            if (problems.length) {
-              core.setFailed(problems.map(s => '- ' + s).join('\n'));
-              return;
-            }
-            core.notice('Gate superato: PM, Tester (se applicabile), Revisore e SHA verificati. Verificare anche repository-checks e Code Owner review nel Ruleset.');
+            if (needsTm && !independentTm)
+              problems.push('Serve una review APPROVED di un TM diverso dal TM responsabile, sullo SHA corrente.');
+            if (needsPm && !pmReview)
+              problems.push('I file di governance richiedono una review APPROVED di un PM diverso dal responsabile.');
+            if (problems.length) { core.setFailed(problems.map(p=>'- '+p).join('\n')); return; }
+            core.notice('Gate superato: Tester, Revisore AI, review umana indipendente e SHA verificati. Restano obbligatori repository-checks e CODEOWNERS nel Ruleset.');
