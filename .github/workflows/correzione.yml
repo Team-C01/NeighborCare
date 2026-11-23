@@ -70,10 +70,14 @@ jobs:
                 (c.body||'').includes('Richiesta correzione: '+feedback.id))) {
               core.notice('Correzione gia pubblicata per questo commento.'); core.setOutput('skip','true'); return;
             }
+            const lastPassed=prComments.filter(c=>c.user?.login==='github-actions[bot]' &&
+              ((c.body||'').startsWith('## Tester indipendente — verifica documentale') ||
+               ((c.body||'').startsWith('## Tester indipendente — PR #') &&
+                /Risultato dei test automatici \(exit code\):\s*0\b/.test(c.body||'')))).at(-1);
             const attempts=prComments.filter(c=>/^RICHIESTA CORREZIONE:/m.test(c.body||'') &&
-              c.created_at>=pr.created_at);
+              (!lastPassed || c.created_at>lastPassed.created_at));
             if (attempts.length>3) {
-              core.setFailed('Raggiunto limite di 3 richieste di correzione: escalation manuale.'); return;
+              core.setFailed('Raggiunto limite di 3 correzioni consecutive senza test superati: escalation manuale.'); return;
             }
             const comments=await github.paginate(github.rest.issues.listComments,{
               ...context.repo,issue_number:issueNumber,per_page:100
@@ -149,7 +153,7 @@ jobs:
           test -n "$COPILOT_GITHUB_TOKEN"
           {
             cat AGENTS.md .github/agents/implementatore.agent.md
-            echo 'Sei l Implementatore. Correggi il problema riportato dal TM sulla Draft PR esistente.'
+            echo 'Sei l Implementatore. Correggi o reimplementa nei file approvati il problema riportato dal TM sulla Draft PR esistente.'
             echo 'MODIFICA SOLO i file autorizzati nel piano originale:'
             cat "$RUNNER_TEMP/allowed_files.txt"
             echo 'Non modificare ne cancellare test, Test Frame, file governance, PDF, secret o dipendenze.'
