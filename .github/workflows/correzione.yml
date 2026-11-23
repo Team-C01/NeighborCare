@@ -140,7 +140,7 @@ jobs:
           test -n "$COPILOT_GITHUB_TOKEN"
           {
             cat AGENTS.md .github/agents/implementatore.agent.md
-            echo 'Sei l Implementatore. Correggi o reimplementa nei file approvati il problema riportato dal TM sulla Draft PR esistente.'
+            echo 'Sei l Implementatore. Correggi o reimplementa nell ambito del piano il problema riportato dal TM sulla Draft PR esistente.'
             echo 'La autorizzazione AUTORIZZA PIANO: non richiede una lista di file; segui rigorosamente i requisiti e il piano approvati.'
             echo 'Puoi correggere o reimplementare nei file applicativi backend/, frontend/ e nella documentazione ordinaria (README.md, docs/).'
             echo 'Non modificare test, Test Frame, governance, modelli RAD/SDD, PDF, segreti, .env o dipendenze non approvate.'
