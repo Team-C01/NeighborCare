@@ -1,66 +1,65 @@
-# NeighborCare - Workflow e cicli iterativi
+# NeighborCare - Guida operativa e iterazioni agentiche
 
-## Ruoli
+## 1. Apertura e pianificazione
 
-I PM creano le Issue, assegnano **uno o piu TM** con Write, poi applicano manualmente `fase:piano`. L'assegnazione non avvia il Pianificatore. Ogni TM assegnato puo gestire i passaggi successivi; una review umana deve provenire da una persona Write non assegnata, TM o PM. Non e obbligatoria una review PM, nemmeno sulla governance.
+**PM e TM con permesso Write possono svolgere gli stessi passaggi operativi.** Uno di loro crea una Issue con il template `Task per agente`, assegna uno o piu collaboratori con Write (anche se stesso) e applica manualmente `fase:piano`. L'assegnazione da sola non avvia il Pianificatore.
 
-## Piano e autorizzazione
-
-Il Pianificatore pubblica un piano quando un PM applica `fase:piano`. Un TM assegnato puo chiedere modifiche sulla Issue:
+Il Pianificatore pubblica il piano senza cambiare il codice. Uno degli assegnatari puo chiedere una modifica sulla Issue con:
 
 ```text
 RICHIESTA REVISIONE PIANO:
-Aggiungere il recupero dei messaggi preesistenti.
-Controllare il Sequence Diagram e i Test Frame pertinenti.
+Manca il caso in cui gli intervalli temporali sono consecutivi.
+Prevedere la verifica del Test Frame TF_SIM_08.
 ```
 
-`ripianifica.yml` pubblica la nuova versione. Per autorizzare l'ultima proposta uno dei TM assegnati scrive sulla Issue:
+`ripianifica.yml` produce una nuova versione. Quando e corretta, uno qualsiasi degli assegnatari scrive sulla Issue:
 
 ```text
 AUTORIZZA PIANO: autorizzo l'ultima versione del piano.
 ```
 
-Non occorre inserire l'elenco dei file. L'agente sceglie i file necessari nei confini applicativi/documentali e secondo la funzionalita prevista dal piano. Una autorizzazione precedente all'ultimo piano non vale. Il limite di tre ripianificazioni richiede una verifica umana in caso di stallo.
+Non e richiesta la lista dei file autorizzati; l'Implementatore resta vincolato al piano, ai requisiti e alle aree consentite della repository.
 
-## Prima implementazione
+## 2. Implementazione e test
 
-Un TM assegnato sostituisce `fase:piano` con `fase:implementazione` **sulla Issue**. `implementa.yml` controlla autore e data dell'autorizzazione, verifica i percorsi, crea un branch e una Draft PR con `Closes #N`, `TM autorizzante: @login` e `TM assegnati: @a, @b`. L'elenco degli assegnatari viene congelato: se cambia, il workflow deve fermarsi finche non si decide come procedere.
+Un assegnatario rimuove `fase:piano` e aggiunge `fase:implementazione` alla Issue. L'Implementatore crea un branch e una Draft PR con `Closes #N`, `Autorizzante: @login` e `Responsabili assegnati: @a, @b`, congelando l'elenco.
 
-## Tester e correzioni
+Un assegnatario applica `fase:test` alla Draft PR. Il Tester indipendente deriva e realizza i test dai Test Frame pertinenti e pubblica gli esiti reali. Se la PR riguarda solo documentazione, segnala N/A per test applicativi con motivazione.
 
-Un TM assegnato applica `fase:test` **alla Draft PR**. Il Tester produce test indipendenti dalle specifiche e un report. Se un test fallisce, il Tester non corregge codice o test: un TM assegnato o revisore autorizzato pubblica sulla **PR**:
+## 3. Iterazione della correzione
+
+In caso di test falliti, CI non superata, implementazione incompleta o review negativa, mantenere o riportare la PR allo stato Draft. Un assegnatario o revisore autorizzato con Write puo scrivere:
 
 ```text
 RICHIESTA CORREZIONE:
-TF_07 fallisce.
-Atteso: richiesta completata non annullabile.
-Osservato: annullamento consentito.
-Correggere il comportamento senza modificare i test.
+TF_SIM_08 fallisce: intervalli consecutivi non devono sovrapporsi.
+Atteso: false. Ottenuto: true.
+Correggere o reimplementare il metodo senza modificare i test.
 ```
 
-La stessa richiesta puo dire **Reimplementare completamente il metodo/la classe**, purche entro i file e i requisiti autorizzati. `correzione.yml` aggiorna lo stesso branch e la stessa PR, pubblicando un nuovo commit. Per i nuovi test il TM rimuove e riaggiunge `fase:test`; controllare nuovamente tutti i test pertinenti.
+`correzione.yml` interviene sullo **stesso branch** e sulla **stessa PR**. Puo reimplementare una classe se necessario, ma non cambiare test, RAD/SDD, workflow, segreti o requisiti non pianificati. Dopo il nuovo commit un assegnatario rimuove e riaggiunge `fase:test` sulla PR, eseguendo il retest.
 
-Tre tentativi AI consecutivi senza test superati richiedono intervento umano. Un nuovo ciclo puo iniziare quando, dopo test superati, emerge un rilievo ulteriore in review. Se e sbagliato il Test Frame oppure servono requisiti, dipendenze o aree protette fuori ambito, fermarsi e aprire un altro task, senza indebolire i test.
+Il limite di tre correzioni AI consecutive senza test riusciti richiede un controllo umano; non aggirarlo indebolendo le verifiche.
 
-## Revisore AI e review umana
+## 4. Revisione iterativa e indipendente
 
-Dopo Tester positivo, un TM assegnato clicca **Ready for review**. `revisione.yml` valuta diff e modelli e pubblica `ESITO_REVISIONE: PASS` o `CHANGES_REQUESTED`.
+Dopo Tester riuscito, uno degli assegnatari seleziona Ready for review. Il Revisore AI pubblica `ESITO_REVISIONE: PASS` oppure `CHANGES_REQUESTED`.
 
-Se AI o persona trovano un problema: **Convert to draft**, commento `RICHIESTA CORREZIONE:`, correzione o reimplementazione nelle aree di lavoro consentite, retest con `fase:test`, nuovo Ready for review e nuovo report AI. La PR non viene ricreata e il Revisore AI non modifica codice.
+Se la review AI o umana trova un difetto, riportare la PR a Draft, commentare con `RICHIESTA CORREZIONE:`, ripetere il Tester e poi Ready for review. Ogni nuovo commit richiede una verifica nuova.
 
-Un revisore umano con Write, **non tra gli assegnatari**, approva sullo SHA corrente con Review changes > Approve. Puo essere un TM o Emanuele come PM, ma nessun PM e richiesto obbligatoriamente. Dopo un nuovo commit, invalidare le vecchie approvazioni.
+Un collaboratore con Write **non incluso tra gli assegnatari** (PM oppure TM) esegue Review changes > Approve dopo aver letto il diff. La review indipendente e richiesta anche quando il task e assegnato a un PM. Non e obbligatorio che il revisore sia un PM.
 
-## Governance e merge
+## 5. Governance e merge
 
-`governance-gate` controlla la corrispondenza tra assegnatari Issue/PR, Tester riuscito sul commit attuale, Revisore AI con verdetto PASS e review indipendente. Il Ruleset `Protect main - NeighborCare` richiede anche `repository-checks` e Code Owner review; `CODEOWNERS` consente reviewers developers **o** project-managers. Il merge e sempre manuale da TM o PM autorizzato. L'Issue collegata e la board si aggiornano dopo il merge.
+`governance-gate` confronta Issue e PR, verifica i report Tester e Revisore AI sul commit corrente e richiede una review GitHub APPROVED da un Write non assegnato. Il Ruleset principale impone anche `repository-checks`, una approvazione e Code Owner review.
 
-Il Ruleset separato `PM-only merge - NeighborCare` va aggiornato tramite GitHub Settings, altrimenti i TM non possono fare merge nonostante i nuovi workflow. Non disattivare i required checks. I push di GitHub Actions con `GITHUB_TOKEN` possono non riattivare automaticamente altri workflow: gli eventi manuali su label e Ready for review fanno ripartire i controlli.
+Il merge e **sempre manuale**: PM e TM con le autorizzazioni necessarie possono integrarlo solo dopo i controlli verdi. Per le simulazioni si arriva al punto precedente al merge, poi si chiude la PR ed elimina il branch di test.
 
-## Recupero
+## 6. Recupero
 
-- Piano assente: PM verifica assegnatari e applica `fase:piano`.
-- Implementazione fallita prima del push: leggere i log; non ripetere la fase se branch o PR esistono gia.
-- Branch creato ma PR assente: recuperare la Draft PR esistente.
-- Tester fallito: richiesta di correzione e retest.
-- Review negativa: convertire a Draft, reimplementare o correggere, poi test e nuova review.
-- Tre tentativi inefficaci: coinvolgere un membro del team e conservare log, commit e evidenze.
+- Piano non partito: verificare Write, Issue `task-agente`, assegnatari e label `fase:piano`.
+- Piano errato: `RICHIESTA REVISIONE PIANO:` nella Issue; poi nuova `AUTORIZZA PIANO:`.
+- Implementazione errata: `RICHIESTA CORREZIONE:` nella Draft PR e retest.
+- Tester errato: verificare i Test Frame e correggere le specifiche tramite task dedicato, senza forzare verde.
+- Revisore AI o persona rifiuta: Convert to draft, correzione, retest e nuova review.
+- Nuovo commit: ripetere le verifiche e non riutilizzare la review sul vecchio SHA.
