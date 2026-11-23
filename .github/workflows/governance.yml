@@ -29,6 +29,7 @@ jobs:
             if (!prNumber) { core.setFailed('Evento senza Pull Request.'); return; }
             const {data:pr}=await github.rest.pulls.get({...context.repo,pull_number:prNumber});
             const sha=pr.head.sha;
+            const pmLogins=['antonio-caiazzo',(process.env.SECOND_PM_LOGIN||'').toLowerCase()].filter(Boolean);
             const problems=[];
             if (pr.state!=='open' || pr.draft) problems.push('La PR deve essere aperta e Ready for review.');
             if (pr.base.ref!=='main' || pr.head.repo?.full_name!==context.repo.owner+'/'+context.repo.repo)
@@ -55,6 +56,27 @@ jobs:
               p.startsWith('.github/')||p==='docs/agentic-workflow-iterazioni.md';
             const needsPm=paths.some(protectedPath);
             const needsTm=paths.some(p=>!protectedPath(p));
+            // Administrative governance PR: opened by a PM, only protected files,
+            // requires approval by the OTHER PM; never grants exemption to application PRs.
+            const manualGovernance=paths.length>0 && paths.every(protectedPath) &&
+              pmLogins.includes((pr.user?.login||'').toLowerCase()) &&
+              !linked && !frozen && !pr.head.ref.startsWith('agent/issue-');
+            if (manualGovernance) {
+              const {data:manualReviews}=await github.rest.pulls.listReviews({
+                ...context.repo,pull_number:prNumber,per_page:100
+              });
+              const latestReview=new Map();
+              for (const rev of manualReviews) latestReview.set((rev.user?.login||'').toLowerCase(),rev);
+              const independentPm=pmLogins.some(login=>{
+                const rev=latestReview.get(login);
+                return login!==(pr.user?.login||'').toLowerCase() &&
+                  rev?.state==='APPROVED' && rev.commit_id===sha;
+              });
+              if (!independentPm) problems.push('Governance manuale: serve APPROVED dell altro PM sullo SHA attuale.');
+              if (problems.length) { core.setFailed(problems.map(p=>'- '+p).join('\n')); return; }
+              core.notice('PR di governance: approvata dal secondo PM. CI e Code Owner review restano richiesti dal Ruleset.');
+              return;
+            }
             const comments=await github.paginate(github.rest.issues.listComments,{...context.repo,issue_number:prNumber,per_page:100});
             
             const testerReport=comments.filter(c=>{
@@ -101,7 +123,6 @@ jobs:
             );
             if (!reviewerRun) problems.push('Manca una run Revisore riuscita sul commit corrente.');
             
-            const pmLogins=['antonio-caiazzo',(process.env.SECOND_PM_LOGIN||'').toLowerCase()].filter(Boolean);
             const {data:reviews}=await github.rest.pulls.listReviews({...context.repo,pull_number:prNumber,per_page:100});
             const latest=new Map();
             for (const review of reviews) {
