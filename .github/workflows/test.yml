@@ -120,6 +120,10 @@ jobs:
             cat AGENTS.md .github/agents/tester.agent.md
             echo 'Sei in una sessione nuova e indipendente dall Implementatore.'
             echo 'Usa UC, Category Partition, Test Frame e firme dei metodi; non leggere il corpo dei metodi implementati per decidere gli esiti attesi.'
+            echo 'I Test Frame riportati direttamente nella sezione Test previsti della Issue sono una fonte valida anche senza file separati in docs/test. Non confonderli con gli esempi XX/YY.'
+            echo 'Per una Issue di collaudo tecnico isolato, usa i requisiti e gli esiti attesi della Issue, senza pretendere che esista un caso d uso RAD non applicabile.'
+            echo 'Quando i requisiti e le firme sono sufficienti, CREA FISICAMENTE i file di test con gli strumenti write/edit/apply_patch disponibili. Non limitarti a descrivere il codice nella risposta.'
+            echo 'Se il backend ha src/main/java e pom.xml, scrivi test JUnit 5 effettivi sotto backend/src/test/java nel package coerente, con asserzioni per ogni TF pertinente non ancora coperto.'
             echo 'Aggiungi test solo per Test Frame NON gia coperti; evita duplicati dopo correzioni precedenti.'
             echo 'Se i test esistenti coprono gia i frame, non scrivere nuovi file: il workflow li rieseguira.'
             echo 'Crea eventuali nuovi test in backend/src/test/, frontend/tests/ o frontend/src/ con suffisso .test.* o .spec.*.'
@@ -157,7 +161,14 @@ jobs:
           if [ "$count" -eq 0 ]; then
             if ! git ls-files backend/src/test frontend/tests frontend/src | \
                 grep -E '^(backend/src/test/.*\.(java|kt)|frontend/tests/.*\.(test|spec)\.[A-Za-z0-9]+|frontend/src/.*\.(test|spec)\.[A-Za-z0-9]+)$' >/dev/null; then
-              echo "::error::Nessun nuovo test e nessun test applicativo esistente: vedere report dell agente."
+              echo '::group::Motivazione del Tester AI (nessun file generato)'
+              if [ -s "$RUNNER_TEMP/tester.md" ]; then
+                sed -n '1,180p' "$RUNNER_TEMP/tester.md"
+              else
+                echo 'Il Tester AI non ha prodotto un report testuale.'
+              fi
+              echo '::endgroup::'
+              echo "::error::Il Tester non ha creato test eseguibili. Verificare nel report sopra quali specifiche o firme mancano; non segnare il task come superato."
               exit 1
             fi
             echo '::notice::Nessun nuovo test necessario: riesecuzione dei test presenti.'
