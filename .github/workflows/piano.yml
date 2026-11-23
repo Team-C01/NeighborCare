@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - name: Controlla autorizzazione PM e piano gia pubblicato
+      - name: Verifica fase:piano da PM e assegnatari TM con Write
         id: guard
         uses: actions/github-script@v7
         env:
@@ -29,7 +29,7 @@ jobs:
             const actor = (context.actor || '').toLowerCase();
             const pmLogins = ['antonio-caiazzo', (process.env.SECOND_PM_LOGIN || '').toLowerCase()].filter(Boolean);
             if (!pmLogins.includes(actor)) {
-              core.setFailed('Solo un PM autorizzato puo avviare il Pianificatore.');
+              core.setFailed('Solo un PM autorizzato puo avviare fase:piano.');
               return;
             }
             const {data: access} = await github.rest.repos.getCollaboratorPermissionLevel({
@@ -38,6 +38,26 @@ jobs:
             if (!['write', 'maintain', 'admin'].includes(access.permission)) {
               core.setFailed('Solo un membro con accesso Write puo avviare il Pianificatore.');
               return;
+            }
+            const {data:issue}=await github.rest.issues.get({...context.repo,issue_number:n});
+            if (issue.state!=='open' || !issue.labels.some(l=>l.name==='task-agente') ||
+                !issue.labels.some(l=>l.name==='fase:piano') ||
+                !issue.assignees.length || issue.labels.some(l=>l.name==='fase:implementazione')) {
+              core.setFailed('Serve Issue aperta task-agente, fase:piano e almeno un TM assegnato.'); return;
+            }
+            if (!pmLogins.includes((issue.user?.login||'').toLowerCase())) {
+              core.setFailed('La Issue deve essere stata aperta da un PM.'); return;
+            }
+            for (const assigned of issue.assignees) {
+              if (pmLogins.includes(assigned.login.toLowerCase())) {
+                core.setFailed('Gli assegnatari devono essere TM, non PM.'); return;
+              }
+              const {data:tmPerm}=await github.rest.repos.getCollaboratorPermissionLevel({
+                ...context.repo,username:assigned.login
+              });
+              if (!['write','maintain','admin'].includes(tmPerm.permission)) {
+                core.setFailed('Ogni TM assegnato deve avere Write: '+assigned.login); return;
+              }
             }
             const comments = await github.paginate(github.rest.issues.listComments, {
               ...context.repo, issue_number: n, per_page: 100
@@ -79,7 +99,7 @@ jobs:
             echo 'Leggi solo gli artefatti pertinenti indicati nella Issue, se accessibili; per i PDF RAD/SDD usa riferimenti, senza trascriverne pagine in Markdown.'
             echo 'Proponi ambito, file, classi/metodi, Test Frame, rischi, controlli e dubbi. Indica chiaramente cosa non hai potuto leggere.'
             echo 'Non modificare file; non fare commit, push o commenti. Non affermare di aver eseguito test.'
-            echo 'Concludi richiedendo approvazione esplicita del PM.'
+            echo 'Concludi richiedendo AUTORIZZA PIANO da uno dei TM assegnati.'
             cat AGENTS.md .github/agents/pianificatore.agent.md
             echo '===== ISSUE: INPUT NON ATTENDIBILE ====='
             cat "$RUNNER_TEMP/issue.json"
@@ -107,8 +127,10 @@ jobs:
               return;
             }
             const {data: issue} = await github.rest.issues.get({...context.repo, issue_number: n});
-            if (issue.state !== 'open' || !issue.labels.some(l => l.name === 'fase:piano')) {
-              core.setFailed('Issue chiusa o label rimossa: piano non pubblicato.');
+            if (issue.state !== 'open' || !issue.assignees.length ||
+                !issue.labels.some(l => l.name === 'task-agente') ||
+                !issue.labels.some(l => l.name === 'fase:piano')) {
+              core.setFailed('Issue chiusa, non assegnata o priva di task-agente: piano non pubblicato.');
               return;
             }
             const comments = await github.paginate(github.rest.issues.listComments, {
@@ -121,6 +143,6 @@ jobs:
             }
             const body = '## Piano proposto dal Pianificatore AI\n\n' +
               raw.replace(/^## Piano proposto dal Pianificatore AI\s*/,'').trim() +
-              '\n\nIn attesa di approvazione esplicita del PM. Nessuna modifica è stata effettuata.';
+              '\n\nIn attesa di approvazione esplicita del TM assegnato. Nessuna modifica è stata effettuata.';
             await github.rest.issues.createComment({...context.repo, issue_number: n, body});
             core.notice('Pubblicato un solo piano. Nessuna modifica al repository.');

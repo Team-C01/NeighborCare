@@ -31,6 +31,17 @@ jobs:
             if (!['write','maintain','admin'].includes(perm.permission)) {
               core.setFailed('La label Test puo essere attivata solo dal team con accesso Write.'); return;
             }
+            const linked=(pr.body||'').match(/\b(?:Closes|Fixes)\s+#(\d+)\b/i);
+            const frozen=(pr.body||'').match(/^TM assegnati:\s*(.+)$/m)?.[1]
+              ?.split(',').map(s=>s.trim().replace(/^@/,'').toLowerCase()).sort();
+            if (!linked || !frozen) { core.setFailed('Manca la Issue collegata o elenco TM assegnati.'); return; }
+            const {data:assignedIssue}=await github.rest.issues.get({...context.repo,issue_number:Number(linked[1])});
+            const assignedTms=(assignedIssue.assignees||[]).map(u=>u.login.toLowerCase()).sort();
+            if (assignedIssue.state!=='open' || !assignedTms.length ||
+                JSON.stringify(assignedTms)!==JSON.stringify(frozen) ||
+                !assignedTms.includes((context.actor||'').toLowerCase())) {
+              core.setFailed('Solo un TM assegnato puo avviare il Tester con assegnazione invariata.'); return;
+            }
             const files=await github.paginate(github.rest.pulls.listFiles,{
               ...context.repo,pull_number:pr.number,per_page:100
             });
@@ -205,7 +216,8 @@ jobs:
             printf 'Commit di partenza: %s\n' "$EXPECTED_SHA";
             printf 'Commit dopo il test: %s\n\n' "$(git rev-parse HEAD)";
             cat "$RUNNER_TEMP/tester.md";
-            printf '\n\nRisultato dei test automatici (exit code): ';
+            printf '\nRun Tester: %s\n' "$GITHUB_RUN_ID";
+            printf '\nRisultato dei test automatici (exit code): ';
             cat "$RUNNER_TEMP/test-exit.txt";
           } > "$RUNNER_TEMP/tester-report.md"
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
@@ -227,4 +239,4 @@ jobs:
               core.notice('Report N/A gia presente: non duplicare.'); return;
             }
             await github.rest.issues.createComment({...context.repo,issue_number:n,
-              body:'## Tester indipendente — verifica documentale\n\nCommit esaminato: '+context.payload.pull_request.head.sha+'\n\nLa PR contiene solo documentazione o governance. Test Frame applicativi N/A: controllare il diff, i collegamenti e i documenti in review. Non sono stati generati test fittizi.'});
+              body:'## Tester indipendente — verifica documentale\n\nCommit esaminato: '+context.payload.pull_request.head.sha+'\nRun Tester: '+context.runId+'\n\nLa PR contiene solo documentazione o governance. Test Frame applicativi N/A: controllare il diff, i collegamenti e i documenti in review. Non sono stati generati test fittizi.'});

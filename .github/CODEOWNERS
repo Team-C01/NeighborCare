@@ -4,18 +4,19 @@
 # CODEOWNERS assegna le review obbligatorie, non i permessi di scrittura.
 # I team referenziati devono esistere e avere accesso Write o superiore.
 
-# Regola generale: la review puo essere svolta da PM o TM.
+# Review indipendente: reviewer Write non assegnato (TM o PM), senza obbligo PM.
+# CODEOWNERS non attribuisce permessi di merge, applicati dai Ruleset.
 * @Team-C01/developers @Team-C01/project-managers
 
 # Codice applicativo: proprietari tecnici Team Members.
-/backend/ @Team-C01/developers
-/frontend/ @Team-C01/developers
+/backend/ @Team-C01/developers @Team-C01/project-managers
+/frontend/ @Team-C01/developers @Team-C01/project-managers
 
 # Documentazione: revisione tecnica o di Project Management.
 /docs/ @Team-C01/developers @Team-C01/project-managers
 
-# Governance, workflow e agenti: revisione dei Project Managers.
-/AGENTS.md @Team-C01/project-managers
-/.github/ @Team-C01/project-managers
-/README.md @Team-C01/project-managers
-/docs/agentic-workflow-iterazioni.md @Team-C01/project-managers
+# Governance, workflow e agenti: review da developers O project-managers.
+/AGENTS.md @Team-C01/developers @Team-C01/project-managers
+/.github/ @Team-C01/developers @Team-C01/project-managers
+/README.md @Team-C01/developers @Team-C01/project-managers
+/docs/agentic-workflow-iterazioni.md @Team-C01/developers @Team-C01/project-managers

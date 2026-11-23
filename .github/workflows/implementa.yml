@@ -19,7 +19,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - name: Verifica piano, approvazione PM e ambito autorizzato
+      - name: Verifica piano, autorizzazione e ambito autorizzato
+        id: guard
         uses: actions/github-script@v7
         env:
           SECOND_PM_LOGIN: ${{ vars.NEIGHBORCARE_SECOND_PM_LOGIN }}
@@ -37,53 +38,43 @@ jobs:
             if (issue.state !== 'open' || !issue.labels.some(l=>l.name==='fase:implementazione')) {
               core.setFailed('Issue o fase non valida.'); return;
             }
+            const assignedTms=new Set((issue.assignees||[]).map(u=>u.login.toLowerCase()));
+            if (!assignedTms.size || !assignedTms.has((context.actor||'').toLowerCase())) {
+              core.setFailed('Solo un TM assegnato puo avviare l Implementatore.'); return;
+            }
             const comments = await github.paginate(github.rest.issues.listComments,{
               ...context.repo, issue_number:n, per_page:100
             });
             const plan = comments.filter(c=>c.user?.login === 'github-actions[bot]' &&
               (c.body||'').startsWith('## Piano proposto dal Pianificatore AI')).at(-1);
             if (!plan) { core.setFailed('Piano AI assente: fermare l implementazione.'); return; }
-            // Aggiornare questo elenco SOLO dopo avere verificato i login GitHub degli altri PM.
-            const pmLogins = ['antonio-caiazzo', (process.env.SECOND_PM_LOGIN||'').toLowerCase()].filter(Boolean);
             const unresolvedFeedback = comments.some(c =>
-              pmLogins.includes((c.user?.login||'').toLowerCase()) &&
+              assignedTms.has((c.user?.login||'').toLowerCase()) &&
               c.created_at > plan.created_at &&
               /^RICHIESTA REVISIONE PIANO:/m.test(c.body||''));
             if (unresolvedFeedback) {
-              core.setFailed('Il PM ha richiesto modifiche al piano: attendere una nuova versione e approvazione.');
+              core.setFailed('Il TM ha richiesto modifiche al piano: attendere una nuova versione e approvazione.');
               return;
             }
             const approvals = comments.filter(c =>
-              pmLogins.includes((c.user?.login||'').toLowerCase()) &&
+              assignedTms.has((c.user?.login||'').toLowerCase()) &&
               c.created_at > plan.created_at &&
-              /^APPROVAZIONE PM:/m.test(c.body||'') &&
-              /^File autorizzati:/m.test(c.body||'')
+              /^AUTORIZZA PIANO:/m.test(c.body||'')
             );
             const approval = approvals.at(-1);
             if (!approval) {
-              core.setFailed('Manca approvazione esplicita successiva al piano, firmata da un PM autorizzato.');
+              core.setFailed('Manca approvazione esplicita successiva al piano, firmata dal TM assegnato.');
               return;
             }
             const {data: approvalPerm} = await github.rest.repos.getCollaboratorPermissionLevel({
               ...context.repo, username:approval.user.login
             });
             if (!['write','maintain','admin'].includes(approvalPerm.permission)) {
-              core.setFailed('Il PM che ha approvato non ha piu accesso Write.'); return;
+              core.setFailed('Il TM che ha approvato non ha piu accesso Write.'); return;
             }
-            const match = (approval.body||'').match(/^File autorizzati:\s*(.+)$/m);
-            const allowed = (match?.[1]||'').split(',').map(s=>s.trim()).filter(Boolean);
-            const validPath = p => /^[A-Za-z0-9_.\/-]+$/.test(p) &&
-              !p.split('/').some(x=>x===''||x==='.'||x==='..') &&
-              !p.startsWith('.github/') && !p.startsWith('.git/') &&
-              p !== 'AGENTS.md' && p !== '.gitignore' &&
-              !p.endsWith('.pdf') && !p.endsWith('.lock.yml') &&
-              !/(^|\/)(?:UC_XX|TF_UC_XX|CP_UC_XX|.*_XX.*\.puml)/.test(p) &&
-              !/(^|\/)(src\/test\/|tests\/|[^/]+\.(?:test|spec)\.)/.test(p);
-            if (!allowed.length || allowed.length>12 || new Set(allowed).size!==allowed.length ||
-                !allowed.every(validPath)) {
-              core.setFailed('Lista File autorizzati non valida: max 12 percorsi esatti, nessun modello/esempio/test protetto.');
-              return;
-            }
+            core.setOutput('approver_login',approval.user.login);
+            core.notice('Piano autorizzato da '+approval.user.login+
+              ': il lavoro e limitato alle aree applicative/documentali consentite.');
             const branches = await github.paginate(github.rest.pulls.list,{
               ...context.repo, state:'all', head: context.repo.owner+':agent/issue-'+n+'-implementazione',
               per_page:100
@@ -93,9 +84,7 @@ jobs:
               await github.rest.repos.getBranch({...context.repo, branch:'agent/issue-'+n+'-implementazione'});
               core.setFailed('Branch di implementazione gia esistente.'); return;
             } catch (err) { if (err.status !== 404) throw err; }
-            fs.writeFileSync(path.join(process.env.RUNNER_TEMP,'allowed_files.txt'),
-              allowed.join('\n')+'\n',{mode:0o600});
-            core.notice('Piano e approvazione PM verificati. Ambito congelato a '+allowed.length+' file.');
+
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -113,7 +102,7 @@ jobs:
           gh issue view "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,comments > "$RUNNER_TEMP/issue.json"
           git switch -c "agent/issue-${ISSUE_NUMBER}-implementazione"
-      - name: Implementa solo i file approvati, senza shell
+      - name: Implementa il piano nei confini protetti, senza shell
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           COPILOT_AUTO_UPDATE: 'false'
@@ -122,9 +111,10 @@ jobs:
           test -n "$COPILOT_GITHUB_TOKEN"
           {
             echo 'Sei l Implementatore di NeighborCare. Segui AGENTS.md.'
-            echo 'La lista File autorizzati e stata verificata da uno step deterministico: modifica SOLTANTO quei file.'
-            cat "$RUNNER_TEMP/allowed_files.txt"
-            echo 'Non modificare test, governance, esempi didattici, PDF RAD/SDD, dipendenze non approvate o segreti.'
+            echo 'AUTORIZZA PIANO: approva l ultimo piano. Il piano e la Issue delimitano le funzionalita richieste, non una lista di file.'
+            echo 'Puoi creare o aggiornare i file necessari in backend/, frontend/, README.md e documentazione ordinaria in docs/.'
+            echo 'NON modificare .github/, AGENTS.md, .gitignore, modelli RAD/SDD, Test Frame, test applicativi, PDF, file .env, segreti, dipendenze non previste nel piano.'
+            echo 'Per estendere i requisiti, la architettura o ambiti non previsti, fermati e richiedi una nuova pianificazione.'
             echo 'Leggi gli artefatti reali citati nella Issue solo se presenti: non copiarne pagine in Markdown e non inventare contenuto mancante.'
             echo 'Non fare commit/push/PR, non eseguire shell, non inventare esiti di build. Gli step successivi verificano le modifiche.'
             echo 'Produci un report utile per la PR: piano/approvazione, file, controlli effettuati/non effettuati e rischi.'
@@ -154,9 +144,14 @@ jobs:
             echo "::error::Nessuna modifica prodotta dall agente"; exit 1;
           }
           while IFS= read -r -d '' file; do
-            grep -Fxq -- "$file" "$RUNNER_TEMP/allowed_files.txt" || {
-              echo "::error::File fuori dal piano approvato: $file"; exit 1;
-            }
+            case "$file" in
+              backend/*|frontend/*|README.md|docs/*) ;;
+              *) echo "::error::File fuori dalle aree consentite: $file"; exit 1 ;;
+            esac
+            case "$file" in
+              docs/rad/*|docs/sdd/*|docs/test/*|docs/modelli/*|docs/agentic-workflow-iterazioni.md|*/src/test/*|*/tests/*|*.test.*|*.spec.*|*.pdf|*.lock.yml|*/.env|*/.env.*|*/node_modules/*|*/target/*|*/dist/*|*/build/*)
+                echo "::error::File protetto, test o generato non modificabile: $file"; exit 1 ;;
+            esac
           done < <(git diff --cached --name-only -z)
       - uses: actions/setup-java@v4
         if: ${{ hashFiles('backend/pom.xml') != '' }}
@@ -210,17 +205,24 @@ jobs:
             exit 1
           fi
           while IFS= read -r -d '' file; do
-            if ! grep -Fxq -- "$file" "$RUNNER_TEMP/allowed_files.txt"; then
-              echo "::error::File fuori dal piano approvato: $file"
-              exit 1
-            fi
+            case "$file" in
+              backend/*|frontend/*|README.md|docs/*) ;;
+              *) echo "::error::File fuori dalle aree consentite: $file"; exit 1 ;;
+            esac
+            case "$file" in
+              docs/rad/*|docs/sdd/*|docs/test/*|docs/modelli/*|docs/agentic-workflow-iterazioni.md|*/src/test/*|*/tests/*|*.test.*|*.spec.*|*.pdf|*.lock.yml|*/.env|*/.env.*|*/node_modules/*|*/target/*|*/dist/*|*/build/*)
+                echo "::error::File protetto, test o generato non modificabile: $file"; exit 1 ;;
+            esac
           done < <(git diff --cached --name-only -z)
           git -c user.name='github-actions[bot]' \
             -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit -m "Issue #${ISSUE_NUMBER}: implement approved plan"
           gh auth setup-git
           git push origin "HEAD:refs/heads/agent/issue-${ISSUE_NUMBER}-implementazione"
-          { printf 'Closes #%s\n\n' "$ISSUE_NUMBER"; cat "$RUNNER_TEMP/report.md"; } > "$RUNNER_TEMP/pr.md"
+          ASSIGNED_TMS="$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER" --jq '[.assignees[].login | ascii_downcase] | sort | map("@" + .) | join(", ")')"
+          APPROVER="${{ steps.guard.outputs.approver_login }}"
+          test -n "$ASSIGNED_TMS" && test -n "$APPROVER"
+          { printf 'Closes #%s\nTM autorizzante: @%s\nTM assegnati: %s\n\n' "$ISSUE_NUMBER" "$APPROVER" "$ASSIGNED_TMS"; cat "$RUNNER_TEMP/report.md"; } > "$RUNNER_TEMP/pr.md"
           gh pr create --repo "$GITHUB_REPOSITORY" --base main \
             --head "agent/issue-${ISSUE_NUMBER}-implementazione" --draft \
             --title "[AGENTE] Issue #${ISSUE_NUMBER}" --body-file "$RUNNER_TEMP/pr.md"
