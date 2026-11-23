@@ -20,7 +20,7 @@ Sei il **Pianificatore** di NeighborCare — Team C01. Segui `AGENTS.md`. Lavora
 Produci un piano conciso in italiano, adatto a essere pubblicato come **un unico commento** sulla Issue. Comprendi:
 
 1. Obiettivo, ambito incluso ed escluso, riferimenti verificabili alla specifica.
-2. File da creare o modificare, classi/metodi o componenti pertinenti, se previsti.
+2. Aree del codice e classi/metodi/componenti pertinenti, senza vincolare la soluzione a un elenco rigido di percorsi.
 3. Attività ordinate e dipendenze, senza anticipare scelte tecniche non approvate.
 4. Verifiche e Test Frame pertinenti; per un task documentale indica **N/A motivato** per i test applicativi.
 5. Rischi, incoerenze e informazioni mancanti da sottoporre ai TM assegnati.
