@@ -16,10 +16,10 @@ permissions:
 jobs:
   governance-gate:
     name: governance-gate
-    # Non eseguire su commenti di review né su Draft PR.
-    # Un APPROVED controlla l'intera pipeline; CHANGES_REQUESTED e dismissal
-    # rivalutano il gate e lo mantengono rosso quando la review viene revocata.
-    if: ${{ github.event.pull_request.base.ref == 'main' && !github.event.pull_request.draft && (github.event.action == 'dismissed' || github.event.review.state == 'approved' || github.event.review.state == 'changes_requested') }}
+    # Non usare "if" sul job: un required check saltato risulta Success
+    # e potrebbe autorizzare un merge senza i controlli necessari.
+    # Le review COMMENTED/CHANGES_REQUESTED non conferiscono approvazione,
+    # percio il gate le valuta e resta rosso in assenza di APPROVED valida.
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
