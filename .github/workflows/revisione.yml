@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Verifica richiesta, deduplicazione e dimensione del diff
         id: guard
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const pr=context.payload.pull_request;
@@ -71,11 +71,11 @@ jobs:
             if (size>70000) {
               core.setFailed('Diff oltre 70000 caratteri: suddividere la PR.'); return;
             }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: ${{ steps.guard.outputs.already_present == 'false' }}
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: ${{ steps.guard.outputs.already_present == 'false' }}
         with:
           node-version: '22'
@@ -126,7 +126,7 @@ jobs:
           test -s "$RUNNER_TEMP/revisione-raw.md"
       - name: Valida e pubblica il report, senza approvazione della PR
         if: ${{ steps.guard.outputs.already_present == 'false' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs=require('fs'),path=require('path');

@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Verifica piano, autorizzazione e ambito autorizzato
         id: guard
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs'), path = require('path');
@@ -83,10 +83,10 @@ jobs:
               core.setFailed('Branch di implementazione gia esistente.'); return;
             } catch (err) { if (err.status !== 404) throw err; }
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - name: Installa Copilot CLI
@@ -151,14 +151,15 @@ jobs:
                 echo "::error::File protetto, test o generato non modificabile: $file"; exit 1 ;;
             esac
           done < <(git diff --cached --name-only -z)
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         if: ${{ hashFiles('backend/pom.xml') != '' }}
         with:
           distribution: temurin
+          problem-matcher: true
           java-version-file: backend/.java-version
           cache: maven
           cache-dependency-path: backend/pom.xml
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: ${{ hashFiles('frontend/package.json') != '' }}
         with:
           node-version-file: frontend/.nvmrc
@@ -167,19 +168,24 @@ jobs:
       - name: Compila e verifica il codice prima della PR, se inizializzato
         run: |
           set -euo pipefail
+          : > "$RUNNER_TEMP/build-checks.md"
           if [ -f backend/pom.xml ]; then
             test -s backend/.java-version || { echo "::error::Versione Java non approvata o assente"; exit 1; }
             (cd backend && mvn -B verify)
+            printf '%s\n' '- Backend: `mvn -B verify` eseguito con successo prima del Tester indipendente.' >> "$RUNNER_TEMP/build-checks.md"
           else
             echo "::notice::Backend non inizializzato: Maven N/A."
+            printf '%s\n' '- Backend: Maven N/A (nessun `backend/pom.xml`).' >> "$RUNNER_TEMP/build-checks.md"
           fi
           if [ -f frontend/package.json ]; then
             test -s frontend/.nvmrc && test -s frontend/package-lock.json || {
               echo "::error::Bootstrap frontend incompleto"; exit 1;
             }
             (cd frontend && npm ci && npm run build && npm run test:ci)
+            printf '%s\n' '- Frontend: `npm ci`, `npm run build` e `npm run test:ci` eseguiti con successo.' >> "$RUNNER_TEMP/build-checks.md"
           else
             echo "::notice::Frontend non inizializzato: npm N/A."
+            printf '%s\n' '- Frontend: npm N/A (nessun `frontend/package.json`).' >> "$RUNNER_TEMP/build-checks.md"
           fi
       - name: Verifica diff e pubblica solo una Draft PR
         env:
@@ -220,7 +226,26 @@ jobs:
           ASSIGNED_TMS="$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER" --jq '[.assignees[].login | ascii_downcase] | sort | map("@" + .) | join(", ")')"
           APPROVER="${{ steps.guard.outputs.approver_login }}"
           test -n "$ASSIGNED_TMS" && test -n "$APPROVER"
-          { printf 'Closes #%s\nAutorizzante: @%s\nResponsabili assegnati: %s\n\n' "$ISSUE_NUMBER" "$APPROVER" "$ASSIGNED_TMS"; cat "$RUNNER_TEMP/report.md"; } > "$RUNNER_TEMP/pr.md"
+          {
+            printf 'Closes #%s\nAutorizzante: @%s\nResponsabili assegnati: %s\n\n' "$ISSUE_NUMBER" "$APPROVER" "$ASSIGNED_TMS"
+            printf '## Issue collegata e piano autorizzato\n\n'
+            printf -- '- Issue: #%s\n- Piano autorizzato da: @%s\n- Referenti assegnati: %s\n\n' "$ISSUE_NUMBER" "$APPROVER" "$ASSIGNED_TMS"
+            printf '## Modifiche effettuate\n\n'
+            while IFS= read -r changed; do
+              printf -- '- `%s`\n' "$changed"
+            done < <(git diff-tree --no-commit-id --name-only -r HEAD)
+            printf '\n## Modelli e requisiti consultati\n\n'
+            printf 'Riferimenti dichiarati dall agente nel report sottostante; verificare in review le fonti effettivamente accessibili, incluse eventuali limitazioni dei PDF RAD/SDD.\n\n'
+            printf '## Test e verifiche eseguiti\n\n'
+            cat "$RUNNER_TEMP/build-checks.md"
+            printf '\n- Test indipendenti sui Test Frame: da produrre ed eseguire successivamente dal Tester AI.\n\n'
+            printf '## Eventuali deviazioni, rischi e limiti\n\n'
+            printf 'Consultare il resoconto dell Implementatore riportato qui sotto; nessuna deviazione e approvata implicitamente.\n\n'
+            printf '## Resoconto dell Implementatore\n\n'
+            cat "$RUNNER_TEMP/report.md"
+            printf '\n\n## Checklist di review umana\n\n'
+            printf '%s\n' '- [ ] Issue, piano e approvazione verificati' '- [ ] Modifiche coerenti con ambito e modelli' '- [ ] Test Frame coperti dal Tester indipendente con esito reale' '- [ ] Scostamenti e nuove dipendenze autorizzati o dichiarati N/A' '- [ ] Review indipendente sul commit corrente'
+          } > "$RUNNER_TEMP/pr.md"
           gh pr create --repo "$GITHUB_REPOSITORY" --base main \
             --head "agent/issue-${ISSUE_NUMBER}-implementazione" --draft \
             --title "[AGENTE] Issue #${ISSUE_NUMBER}" --body-file "$RUNNER_TEMP/pr.md"
