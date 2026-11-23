@@ -4,7 +4,8 @@
 # CODEOWNERS assegna le review obbligatorie, non i permessi di scrittura.
 # I team referenziati devono esistere e avere accesso Write o superiore.
 
-# Regola generale: la review puo essere svolta da PM o TM.
+# Review tecnica: un TM diverso dal responsabile; governance: review PM.
+# CODEOWNERS non attribuisce permessi di merge, applicati dai Ruleset.
 * @Team-C01/developers @Team-C01/project-managers
 
 # Codice applicativo: proprietari tecnici Team Members.
