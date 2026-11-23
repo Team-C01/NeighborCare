@@ -102,7 +102,7 @@ jobs:
           gh issue view "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,comments > "$RUNNER_TEMP/issue.json"
           git switch -c "agent/issue-${ISSUE_NUMBER}-implementazione"
-      - name: Implementa solo i file approvati, senza shell
+      - name: Implementa il piano nei confini protetti, senza shell
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           COPILOT_AUTO_UPDATE: 'false'
