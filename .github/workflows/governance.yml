@@ -36,15 +36,17 @@ jobs:
               problems.push('La PR deve essere interna e destinata a main.');
 
             const linked=(pr.body||'').match(/\b(?:Closes|Fixes)\s+#(\d+)\b/i);
-            const frozen=(pr.body||'').match(/^TM responsabile: @([A-Za-z0-9-]+)$/m)?.[1]?.toLowerCase();
-            let responsible='';
-            if (linked && frozen) {
+            const frozen=(pr.body||'').match(/^TM assegnati:\s*(.+)$/m)?.[1]
+              ?.split(',').map(s=>s.trim().replace(/^@/,'').toLowerCase()).sort();
+            const approver=(pr.body||'').match(/^TM autorizzante: @([A-Za-z0-9-]+)$/m)?.[1]?.toLowerCase();
+            let assignedTms=[];
+            if (linked && frozen && approver) {
               const {data:issue}=await github.rest.issues.get({...context.repo,issue_number:Number(linked[1])});
-              if (issue.state!=='open' || issue.assignees.length!==1) {
-                problems.push('Issue originale chiusa o senza un solo TM assegnato.');
-              } else {
-                responsible=issue.assignees[0].login.toLowerCase();
-                if (responsible!==frozen) problems.push('Il TM assegnato non coincide con il responsabile registrato nella PR.');
+              assignedTms=(issue.assignees||[]).map(u=>u.login.toLowerCase()).sort();
+              if (issue.state!=='open' || !assignedTms.length ||
+                  JSON.stringify(assignedTms)!==JSON.stringify(frozen) ||
+                  !assignedTms.includes(approver)) {
+                problems.push('Issue o assegnazione TM non coincide con la PR autorizzata.');
               }
             }
             const files=await github.paginate(github.rest.pulls.listFiles,{...context.repo,pull_number:prNumber,per_page:100});
@@ -52,10 +54,9 @@ jobs:
             const paths=files.map(f=>f.filename);
             const protectedPath=p=>p==='AGENTS.md'||p==='README.md'||p==='.gitignore'||
               p.startsWith('.github/')||p==='docs/agentic-workflow-iterazioni.md';
-            const needsPm=paths.some(protectedPath);
-            const needsTm=paths.some(p=>!protectedPath(p));
-            // Administrative governance PR: opened by a PM, only protected files,
-            // requires approval by the OTHER PM; never grants exemption to application PRs.
+            // Tutte le PR richiedono una review umana indipendente. Il PM e facoltativo come revisore.
+            // Le PR manuali che modificano soltanto governance/documentazione possono
+            // essere esaminate da QUALSIASI revisore Write indipendente, anche TM.
             const manualGovernance=paths.length>0 && paths.every(protectedPath) &&
               pmLogins.includes((pr.user?.login||'').toLowerCase()) &&
               !linked && !frozen && !pr.head.ref.startsWith('agent/issue-');
@@ -64,18 +65,23 @@ jobs:
                 ...context.repo,pull_number:prNumber,per_page:100
               });
               const latestReview=new Map();
-              for (const rev of manualReviews) latestReview.set((rev.user?.login||'').toLowerCase(),rev);
-              const independentPm=pmLogins.some(login=>{
-                const rev=latestReview.get(login);
-                return login!==(pr.user?.login||'').toLowerCase() &&
-                  rev?.state==='APPROVED' && rev.commit_id===sha;
-              });
-              if (!independentPm) problems.push('Governance manuale: serve APPROVED dell altro PM sullo SHA attuale.');
+              for (const review of manualReviews) latestReview.set((review.user?.login||'').toLowerCase(),review);
+              let independent=false;
+              for (const [login,review] of latestReview) {
+                if (login===(pr.user?.login||'').toLowerCase() ||
+                    review.state!=='APPROVED' || review.commit_id!==sha) continue;
+                const {data:perm}=await github.rest.repos.getCollaboratorPermissionLevel({
+                  ...context.repo,username:login
+                });
+                if (['write','maintain','admin'].includes(perm.permission)) independent=true;
+              }
+              if (!independent) problems.push('Serve un APPROVED di un revisore Write diverso dall autore.');
               if (problems.length) { core.setFailed(problems.map(p=>'- '+p).join('\n')); return; }
-              core.notice('PR di governance: approvata dal secondo PM. CI e Code Owner review restano richiesti dal Ruleset.');
+              core.notice('Governance: review umana indipendente presente. CI e CODEOWNERS restano richiesti.');
               return;
             }
-            if (!linked || !frozen) problems.push('Mancano Closes #Issue o TM responsabile nella PR.');
+            if (!linked || !frozen || !approver)
+              problems.push('Mancano Closes #Issue, TM autorizzante o lista TM assegnati nella PR.');
             const comments=await github.paginate(github.rest.issues.listComments,{...context.repo,issue_number:prNumber,per_page:100});
 
             const testerReport=comments.filter(c=>{
@@ -128,23 +134,21 @@ jobs:
               const login=(review.user?.login||'').toLowerCase();
               if (login) latest.set(login,review);
             }
-            let independentTm=false,pmReview=false;
+            let independentReview=false;
             for (const [login,review] of latest) {
               if (review.state!=='APPROVED' || review.commit_id!==sha ||
-                  login===responsible || login==='github-actions[bot]' || login===(pr.user?.login||'').toLowerCase())
+                  assignedTms.includes(login) || login==='github-actions[bot]' ||
+                  login===(pr.user?.login||'').toLowerCase())
                 continue;
               try {
                 const {data:perm}=await github.rest.repos.getCollaboratorPermissionLevel({
                   ...context.repo,username:login
                 });
                 if (!['write','maintain','admin'].includes(perm.permission)) continue;
-                if (pmLogins.includes(login)) pmReview=true;
-                else independentTm=true;
+                independentReview=true;
               } catch (error) { core.warning('Permessi revisore non verificabili: '+login); }
             }
-            if (needsTm && !independentTm)
-              problems.push('Serve una review APPROVED di un TM diverso dal TM responsabile, sullo SHA corrente.');
-            if (needsPm && !pmReview)
-              problems.push('I file di governance richiedono una review APPROVED di un PM diverso dal responsabile.');
+            if (!independentReview)
+              problems.push('Serve una review APPROVED di un membro Write non assegnato al task, sullo SHA corrente (TM o PM).');
             if (problems.length) { core.setFailed(problems.map(p=>'- '+p).join('\n')); return; }
-            core.notice('Gate superato: Tester, Revisore AI, review umana indipendente e SHA verificati. Restano obbligatori repository-checks e CODEOWNERS nel Ruleset.');
+            core.notice('Gate superato: Tester, Revisore AI, review umana indipendente e SHA verificati. CI e CODEOWNERS restano obbligatori.');
