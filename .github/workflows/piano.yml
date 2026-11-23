@@ -48,9 +48,17 @@ jobs:
             if (!pmLogins.includes((issue.user?.login||'').toLowerCase())) {
               core.setFailed('La Issue deve essere stata aperta da un PM.'); return;
             }
+            // Eccezione isolata per il collaudo: solo il PM autore della Issue
+            // puo assegnare a se stesso una Issue con marker esplicito nel titolo.
+            // Tutte le Issue ordinarie continuano a richiedere assegnatari TM.
+            const pmPilot=issue.title.includes('[SIMULAZIONE PM]') &&
+              issue.assignees.length===1 &&
+              issue.assignees[0].login.toLowerCase()===actor &&
+              (issue.user?.login||'').toLowerCase()===actor &&
+              pmLogins.includes(actor);
             for (const assigned of issue.assignees) {
-              if (pmLogins.includes(assigned.login.toLowerCase())) {
-                core.setFailed('Gli assegnatari devono essere TM, non PM.'); return;
+              if (pmLogins.includes(assigned.login.toLowerCase()) && !pmPilot) {
+                core.setFailed('Gli assegnatari devono essere TM. Per collaudo PM: titolo [SIMULAZIONE PM] e PM unico assegnatario/autore.'); return;
               }
               const {data:tmPerm}=await github.rest.repos.getCollaboratorPermissionLevel({
                 ...context.repo,username:assigned.login
@@ -143,6 +151,6 @@ jobs:
             }
             const body = '## Piano proposto dal Pianificatore AI\n\n' +
               raw.replace(/^## Piano proposto dal Pianificatore AI\s*/,'').trim() +
-              '\n\nIn attesa di approvazione esplicita del TM assegnato. Nessuna modifica è stata effettuata.';
+              '\n\nIn attesa di AUTORIZZA PIANO da parte di un assegnatario autorizzato. Nessuna modifica è stata effettuata.';
             await github.rest.issues.createComment({...context.repo, issue_number: n, body});
             core.notice('Pubblicato un solo piano. Nessuna modifica al repository.');
