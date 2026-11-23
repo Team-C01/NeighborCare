@@ -1,9 +1,9 @@
 name: Governance PR
 
+# Il gate si avvia solo quando una persona conclude una review.
+# Prima della review il required check resta "Expected" e blocca il merge:
+# non viene mai segnato success/skipped solo per assenza di test o report.
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, reopened, synchronize, edited, labeled, unlabeled, ready_for_review, converted_to_draft]
   pull_request_review:
     types: [submitted, dismissed]
 
@@ -16,10 +16,14 @@ permissions:
 jobs:
   governance-gate:
     name: governance-gate
+    # Non eseguire su commenti di review né su Draft PR.
+    # Un APPROVED controlla l'intera pipeline; CHANGES_REQUESTED e dismissal
+    # rivalutano il gate e lo mantengono rosso quando la review viene revocata.
+    if: ${{ github.event.pull_request.base.ref == 'main' && !github.event.pull_request.draft && (github.event.action == 'dismissed' || github.event.review.state == 'approved' || github.event.review.state == 'changes_requested') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Verifica TM responsabile, Tester, Revisore e review indipendente sul commit corrente
+      - name: Verifica Tester, Revisore AI e review indipendente dopo la review umana
         uses: actions/github-script@v7
         with:
           script: |
