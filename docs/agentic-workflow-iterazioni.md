@@ -51,7 +51,7 @@ Un collaboratore con Write **non incluso tra gli assegnatari** (PM oppure TM) es
 
 ## 5. Governance e merge
 
-`governance-gate` confronta Issue e PR, verifica i report Tester e Revisore AI sul commit corrente e richiede una review GitHub APPROVED da un Write non assegnato. Il Ruleset principale impone anche `repository-checks`, una approvazione e Code Owner review.
+`governance-gate` **non parte all'apertura della PR, all'aggiornamento dei commit o con Ready for review**: prima della review umana, il required check rimane `Expected` e quindi il merge resta bloccato. Il gate parte quando una persona invia una review GitHub `Approve` o `Request changes`, oppure quando una review viene revocata. Per evitare un FAIL prematuro, la review umana `Approve` va inviata **solo dopo** Tester riuscito e Revisore AI con `ESITO_REVISIONE: PASS` sul commit corrente. Il gate confronta Issue e PR, verifica Tester e Revisore sul commit corrente e una review APPROVED da un collaboratore Write non assegnato. Un `Request changes` o una revoca mantiene il blocco; se il codice cambia, sono necessari nuovo Tester, Revisore e una nuova review. Il Ruleset principale richiede inoltre `repository-checks`, una approvazione e Code Owner review.
 
 Il merge e **sempre manuale**: PM e TM con le autorizzazioni necessarie possono integrarlo solo dopo i controlli verdi. Per le simulazioni si arriva al punto precedente al merge, poi si chiude la PR ed elimina il branch di test.
 
