@@ -20,7 +20,7 @@ I workflow seguono i passi 7, 9, 10, 11 e 14 del tutorial, usando Copilot CLI al
 4. **Tester AI:** un assegnatario aggiunge `fase:test` alla Draft PR. Il Tester produce test indipendenti dai Test Frame, senza modificare il codice applicativo. Per task solo documentali indica N/A motivato.
 5. **Correzioni e reimplementazioni:** un assegnatario o revisore autorizzato scrive `RICHIESTA CORREZIONE:` sulla Draft PR. L'agente corregge sullo stesso branch e nell'ambito approvato, senza modificare test e documentazione protetta. Un assegnatario toglie e riapplica `fase:test` per ripetere i controlli.
 6. **Revisore AI:** dopo test riusciti l'assegnatario seleziona Ready for review. Il Revisore pubblica `ESITO_REVISIONE: PASS` o `CHANGES_REQUESTED`. Con errori: Convert to draft, correzione, nuovo Tester e nuova review.
-7. **Review umana:** una persona con Write, PM o TM, **non assegnata al task**, esegue Review changes > Approve sul commit corrente. Non si puo approvare un proprio task nemmeno se il bot ha creato la PR.
+7. **Review umana:** **solo dopo** il report Tester riuscito e il report Revisore AI con `ESITO_REVISIONE: PASS`, una persona con Write (PM o TM) **non assegnata al task** esegue Review changes > Approve sul commit corrente. Questo evento fa partire `governance-gate`. Prima della review il required check resta `Expected`, non `FAIL` e non `SUCCESS`; il merge e bloccato. Non si puo approvare il proprio task anche se il bot ha creato la PR.
 8. **Merge:** un PM o TM autorizzato esegue manualmente il merge solo con `repository-checks`, `governance-gate`, Tester, Revisore e Code Owner review positivi. Non usare auto-merge.
 
 ## Commenti esatti
