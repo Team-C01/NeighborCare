@@ -35,17 +35,17 @@ Usare ID, classi, attributi, tipi e metodi dei modelli reali. Il Class Diagram p
 
 - Leggere UC, RAD/SDD, modelli e Test Frame reali prima del codice e segnalare informazioni mancanti.
 - Il PM crea la Issue `task-agente`, assegna uno o piu TM con Write e **applica `fase:piano`**. Il Pianificatore non si avvia automaticamente sull'assegnazione.
-- Un TM assegnato puo commentare `RICHIESTA REVISIONE PIANO:` nella Issue. L'ultima versione del piano richiede `AUTORIZZA PIANO:` e `File autorizzati:` (massimo dodici percorsi esatti) da uno degli assegnatari.
+- Un TM assegnato puo commentare `RICHIESTA REVISIONE PIANO:` nella Issue. L'ultima versione del piano richiede unicamente il commento `AUTORIZZA PIANO:` di uno degli assegnatari dopo l'ultimo piano; nessun elenco rigido di file.
 - Un TM assegnato sostituisce `fase:piano` con `fase:implementazione` sulla Issue. L'Implementatore verifica il piano e crea una Draft PR con `Closes #N`, `TM autorizzante:` e `TM assegnati:`.
 - Un TM assegnato aggiunge `fase:test` sulla Draft PR. Il Tester e indipendente e ricava i test dai Test Frame, senza alterare il codice. Per task documentali N/A motivato.
-- Se test, CI o review trovano errori, riportare la PR a Draft. Un TM assegnato o revisore autorizzato usa il prefisso unico `RICHIESTA CORREZIONE:`; la Correzione AI puo correggere o **reimplementare interi metodi e classi** sullo stesso branch e soltanto nei file gia autorizzati. Non modificare test o requisiti.
+- Se test, CI o review trovano errori, riportare la PR a Draft. Un TM assegnato o revisore autorizzato usa il prefisso unico `RICHIESTA CORREZIONE:`; la Correzione AI puo correggere o **reimplementare interi metodi e classi** sullo stesso branch e nell'ambito del piano e soltanto in `backend/`, `frontend/`, `README.md` e documentazione ordinaria di `docs/`, senza modificare aree protette. Non modificare test o requisiti.
 - Dopo la correzione: rimuovere e riaggiungere `fase:test` sulla PR, poi Ready for review. Il Revisore AI valuta il nuovo SHA e pubblica `ESITO_REVISIONE: PASS` o `CHANGES_REQUESTED`. Se la review e negativa, ripetere il ciclo.
 - Il merge richiede una review GitHub APPROVED da un collaboratore Write **non assegnato** (TM oppure PM). Nessun PM e obbligatorio come revisore.
 - Dopo tre tentativi AI consecutivi senza test riusciti, fermarsi e chiedere intervento umano; cambiamenti ai requisiti o file fuori piano richiedono un nuovo task.
 
 ### Chiedi prima
 
-Nuovi requisiti, classi/file fuori ambito, cambi architetturali, Test Frame, interfacce condivise e dipendenze: decisione esplicita del team, poi nuova pianificazione.
+Nuovi requisiti, classi/file fuori dalle aree consentite o dalle funzionalita pianificate, cambi architetturali, Test Frame, interfacce condivise e dipendenze: decisione esplicita del team, poi nuova pianificazione.
 
 ### Mai
 
