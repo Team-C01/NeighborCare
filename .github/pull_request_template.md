@@ -2,7 +2,7 @@
 
 <!-- Closes #numero se il task è concluso; altrimenti Refs #numero. -->
 Issue e UC/requisiti:
-Piano e approvazione del PM assegnato:
+Piano e approvazione del TM assegnato:
 
 ## Modifiche effettuate
 
@@ -23,11 +23,11 @@ Tentativi falliti sullo stesso problema e interventi umani:
 
 ## Checklist di review
 
-- [ ] Issue e artefatti pertinenti collegati; piano approvato dal PM prima delle modifiche.
+- [ ] Issue e artefatti pertinenti collegati; piano approvato dal TM prima delle modifiche.
 - [ ] Modifiche coerenti con requisiti e modelli approvati, entro l’ambito autorizzato.
 - [ ] Test derivati dalla specifica; copertura dei Test Frame ed esiti effettivi riportati.
 - [ ] Modelli interessati aggiornati nella stessa PR; deviazioni e nuove dipendenze approvate.
 - [ ] Nessun segreto/dato personale aggiunto e nessun test alterato per ottenere verde.
-- [ ] Autore in grado di spiegare il risultato; review umana positiva di una persona diversa dall’autore.
+- [ ] TM responsabile capace di spiegare il risultato; review di un altro TM (e PM per file di governance).
 
 <!-- Per task documentali, motivare UC/test applicativi N/A. L’ultima casella si completa dopo la review. -->
