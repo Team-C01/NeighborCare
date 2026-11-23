@@ -44,20 +44,20 @@ jobs:
               core.setFailed('Branch non creato dal flusso di implementazione approvato.'); return;
             }
             const {data:issue}=await github.rest.issues.get({...context.repo,issue_number:issueNumber});
-            if (issue.state!=='open' || issue.assignees.length!==1) {
-              core.setFailed('Issue originale aperta e un solo TM assegnato sono obbligatori.'); return;
-            }
-            const assignedTm=issue.assignees[0].login.toLowerCase();
-            const frozen=(pr.body||'').match(/^TM responsabile: @([A-Za-z0-9-]+)$/m)?.[1]?.toLowerCase();
-            if (!frozen || frozen!==assignedTm) {
-              core.setFailed('Assegnazione TM cambiata rispetto alla PR: interrompere il flusso.'); return;
+            const assignedTms=new Set((issue.assignees||[]).map(u=>u.login.toLowerCase()));
+            const frozen=(pr.body||'').match(/^TM assegnati:\s*(.+)$/m)?.[1]
+              ?.split(',').map(s=>s.trim().replace(/^@/,'').toLowerCase()).sort();
+            const approver=(pr.body||'').match(/^TM autorizzante: @([A-Za-z0-9-]+)$/m)?.[1]?.toLowerCase();
+            if (issue.state!=='open' || !assignedTms.size || !frozen || !approver ||
+                !assignedTms.has(approver) ||
+                JSON.stringify([...assignedTms].sort())!==JSON.stringify(frozen)) {
+              core.setFailed('Issue e assegnatari devono corrispondere alla PR autorizzata.'); return;
             }
             const {data:reviewList}=await github.rest.pulls.listReviews({...context.repo,pull_number:prNumber,per_page:100});
             const reviewerRequested=(pr.requested_reviewers||[]).some(u=>u.login.toLowerCase()===actor);
             const reviewerChanges=reviewList.some(r=>(r.user?.login||'').toLowerCase()===actor && r.state==='CHANGES_REQUESTED');
-            const pmLogins=['antonio-caiazzo',(process.env.SECOND_PM_LOGIN||'').toLowerCase()].filter(Boolean);
-            if (pmLogins.includes(actor) || (actor!==assignedTm && !reviewerRequested && !reviewerChanges)) {
-              core.setFailed('Solo il TM assegnato o un TM revisore autorizzato puo richiedere correzioni.'); return;
+            if (!assignedTms.has(actor) && !reviewerRequested && !reviewerChanges) {
+              core.setFailed('Solo un TM assegnato o un revisore autorizzato con Write puo richiedere correzioni.'); return;
             }
             const feedback=context.payload.comment;
             if ((feedback.body||'').length<35 || feedback.body.length>6000) {
@@ -81,19 +81,19 @@ jobs:
             const plan=comments.filter(c=>c.user?.login==='github-actions[bot]' &&
               (c.body||'').startsWith('## Piano proposto dal Pianificatore AI')).at(-1);
             if (!plan) { core.setFailed('Piano originale assente.'); return; }
-            if (comments.some(c=>(c.user?.login||'').toLowerCase()===assignedTm &&
+            if (comments.some(c=>assignedTms.has((c.user?.login||'').toLowerCase()) &&
                 c.created_at>plan.created_at && /^RICHIESTA REVISIONE PIANO:/m.test(c.body||''))) {
               core.setFailed('Revisione del piano ancora richiesta: blocco correzioni.'); return;
             }
-            const approval=comments.filter(c=>(c.user?.login||'').toLowerCase()===assignedTm &&
-              c.created_at>plan.created_at && /^APPROVAZIONE TM:/m.test(c.body||'') &&
+            const approval=comments.filter(c=>assignedTms.has((c.user?.login||'').toLowerCase()) &&
+              c.created_at>plan.created_at && /^AUTORIZZA PIANO:/m.test(c.body||'') &&
               /^File autorizzati:/m.test(c.body||'')).at(-1);
             if (!approval) { core.setFailed('Approvazione del piano corrente assente.'); return; }
             const {data:approvalPerm}=await github.rest.repos.getCollaboratorPermissionLevel({
               ...context.repo,username:approval.user.login
             });
             if (!['write','maintain','admin'].includes(approvalPerm.permission)) {
-              core.setFailed('PM approvatore privo di Write.'); return;
+              core.setFailed('Autorizzante privo di Write.'); return;
             }
             const m=approval.body.match(/^File autorizzati:\s*(.+)$/m);
             const allowed=(m?.[1]||'').split(',').map(s=>s.trim()).filter(Boolean);

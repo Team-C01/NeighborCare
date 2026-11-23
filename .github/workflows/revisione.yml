@@ -32,14 +32,17 @@ jobs:
               core.setFailed('Revisione consentita solo quando un membro autorizzato prepara la PR.'); return;
             }
             const linked=(pr.body||'').match(/\b(?:Closes|Fixes)\s+#(\d+)\b/i);
-            const frozen=(pr.body||'').match(/^TM responsabile: @([A-Za-z0-9-]+)$/m)?.[1]?.toLowerCase();
-            if (!linked || !frozen || frozen!==(context.actor||'').toLowerCase()) {
-              core.setFailed('Solo il TM responsabile puo rendere la PR Ready for review.'); return;
+            const frozen=(pr.body||'').match(/^TM assegnati:\s*(.+)$/m)?.[1]
+              ?.split(',').map(s=>s.trim().replace(/^@/,'').toLowerCase()).sort();
+            if (!linked || !frozen) {
+              core.setFailed('La PR deve contenere Issue collegata e TM assegnati.'); return;
             }
             const {data:issue}=await github.rest.issues.get({...context.repo,issue_number:Number(linked[1])});
-            if (issue.state!=='open' || issue.assignees.length!==1 ||
-                issue.assignees[0].login.toLowerCase()!==frozen) {
-              core.setFailed('Issue o assegnazione TM non valida.'); return;
+            const assignedTms=(issue.assignees||[]).map(u=>u.login.toLowerCase()).sort();
+            if (issue.state!=='open' || !assignedTms.length ||
+                JSON.stringify(assignedTms)!==JSON.stringify(frozen) ||
+                !assignedTms.includes((context.actor||'').toLowerCase())) {
+              core.setFailed('Solo uno dei TM assegnati puo rendere Ready for review.'); return;
             }
             const comments=await github.paginate(github.rest.issues.listComments,{
               ...context.repo,issue_number:pr.number,per_page:100
