@@ -130,14 +130,14 @@ def latest_plan(issue):
     return plan
 
 def context():
-    require(PHASE in ROLE, "Fase sconosciuta")
+    require(PHASE in ROLE and REPO == "Team-C01/NeighborCare", "Fase o repository non validi")
     require(permission(ACTOR) in WRITE, "Serve un collaboratore con permesso Write")
     event_issue = EVENT.get("issue") or {}
     pr_event = EVENT.get("pull_request") or {}
     pr_number = pr_event.get("number") or (event_issue.get("number") if event_issue.get("pull_request") else None)
     pr = repo_api(f"pulls/{pr_number}") if pr_number else None
     if pr:
-        require(pr["state"] == "open" and pr["head"]["repo"]["full_name"] == REPO and
+        require(pr["state"] == "open" and (pr["head"]["repo"] or {}).get("full_name") == REPO and
                 pr["base"]["ref"] == "main" and pr["head"]["ref"] != "main", "PR non interna verso main")
         if pr_event:
             require(pr["head"]["sha"] == pr_event["head"]["sha"], "PR cambiata: richiedere la fase sul nuovo commit")
@@ -157,6 +157,8 @@ def context():
         require(pr, "La fase deve partire da una PR")
     if PHASE in {"piano", "implementazione"}:
         require(not pr, "La fase deve partire da una Issue")
+    if PHASE == "test" and EVENT.get("label"):
+        require("fase:test" in labels(pr), "Applicare fase:test alla PR")
     if PHASE == "implementazione":
         require("fase:implementazione" in labels(issue), "Applicare fase:implementazione per autorizzare il piano")
     plan = latest_plan(issue) if PHASE == "implementazione" else None
@@ -167,7 +169,8 @@ def context():
         timestamp = EVENT.get("issue", {}).get("updated_at")
         if timestamp:
             require(plan["created_at"] <= timestamp, "Piano pubblicato dopo l'evento: riapplicare la label")
-    base = pr["base"]["sha"] if pr else os.environ["GITHUB_SHA"]
+    # Pin trusted rules to the event base, even if main advances during generation.
+    base = EVENT.get("pull_request", {}).get("base", {}).get("sha") or os.environ["GITHUB_SHA"]
     head = pr["head"]["sha"] if pr else base
     branch = pr["head"]["ref"] if pr else f"agent/issue-{issue_number}-implementazione"
     require(SHA.fullmatch(base) and SHA.fullmatch(head), "Commit non valido")
