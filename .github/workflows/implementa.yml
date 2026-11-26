@@ -33,7 +33,7 @@ jobs:
               core.setFailed('Solo un membro con accesso Write puo avviare l Implementatore.'); return;
             }
             const {data: issue} = await github.rest.issues.get({...context.repo, issue_number:n});
-            if (issue.state !== 'open' || !issue.labels.some(l=>l.name==='fase:implementazione')) {
+            if (issue.state !== 'open' || !issue.labels.some(l=>l.name==='fase:implementazione') || issue.labels.some(l=>l.name==='fase:piano')) {
               core.setFailed('Issue o fase non valida.'); return;
             }
             const assignedMembers=new Set((issue.assignees||[]).map(u=>u.login.toLowerCase()));
@@ -63,6 +63,11 @@ jobs:
             if (!approval) {
               core.setFailed('Manca approvazione esplicita successiva al piano, firmata da un assegnatario.');
               return;
+            }
+            const events=await github.paginate(github.rest.issues.listEvents,{...context.repo,issue_number:n,per_page:100});
+            const assignmentChange=events.filter(e=>['assigned','unassigned'].includes(e.event)).at(-1);
+            if (assignmentChange && approval.created_at<assignmentChange.created_at) {
+              core.setFailed('Assegnatari cambiati: nuova AUTORIZZA PIANO richiesta.'); return;
             }
             const {data: approvalPerm} = await github.rest.repos.getCollaboratorPermissionLevel({
               ...context.repo, username:approval.user.login
