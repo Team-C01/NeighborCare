@@ -44,6 +44,10 @@ jobs:
             }
             const issueComments=await github.paginate(github.rest.issues.listComments,{...context.repo,issue_number:Number(linked[1]),per_page:100});
             const latestPlan=issueComments.filter(c=>c.user?.login==='github-actions[bot]' && (c.body||'').startsWith('## Piano proposto dal Pianificatore AI')).at(-1);
+            const planStates=(latestPlan?.body||'').match(/^STATO_PIANO: (PRONTO|BLOCCATO)\s*$/gm)||[];
+            if (planStates.length && (planStates.length!==1 || planStates[0].trim()!=='STATO_PIANO: PRONTO')) {
+              core.setFailed('Piano BLOCCATO o ambiguo: ripianificare prima di testare.'); return;
+            }
             const approval=latestPlan && issueComments.filter(c=>assignedMembers.includes((c.user?.login||'').toLowerCase()) && c.created_at>latestPlan.created_at && (c.body||'').startsWith('AUTORIZZA PIANO:')).at(-1);
             const pending=latestPlan && issueComments.some(c=>assignedMembers.includes((c.user?.login||'').toLowerCase()) && c.created_at>latestPlan.created_at && (c.body||'').startsWith('RICHIESTA REVISIONE PIANO:'));
             const events=await github.paginate(github.rest.issues.listEvents,{...context.repo,issue_number:Number(linked[1]),per_page:100});
@@ -151,8 +155,8 @@ jobs:
             echo 'Riporta ID dei frame, asserzioni attese e limiti delle verifiche.'
           } > "$RUNNER_TEMP/prompt.txt"
           copilot -p "$(cat "$RUNNER_TEMP/prompt.txt")" -s --model=auto --no-ask-user --no-auto-update \
-            --disable-builtin-mcps --available-tools='view,grep,glob,read,write,edit,apply_patch,bash' \
-            --allow-tool='write,edit,apply_patch' \
+            --disable-builtin-mcps --available-tools='view,grep,glob,read,write,edit,create,apply_patch,bash' \
+            --allow-tool='write' --allow-tool='read' \
             --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend ci)' \
             --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend run build)' \
             --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend run test:ci)' \
