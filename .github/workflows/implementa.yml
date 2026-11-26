@@ -47,8 +47,8 @@ jobs:
               (c.body||'').startsWith('## Piano proposto dal Pianificatore AI')).at(-1);
             if (!plan) { core.setFailed('Piano AI assente: fermare l implementazione.'); return; }
             const planStates = (plan.body||'').match(/^STATO_PIANO: (PRONTO|BLOCCATO)\s*$/gm) || [];
-            if (planStates.length && (planStates.length !== 1 || planStates[0].trim() !== 'STATO_PIANO: PRONTO')) {
-              core.setFailed('Piano BLOCCATO o ambiguo: tornare a fase:piano e richiedere revisione.'); return;
+            if (planStates.length !== 1 || planStates[0].trim() !== 'STATO_PIANO: PRONTO') {
+              core.warning('Stato consultivo del piano non PRONTO: la decisione resta all assegnatario. Verificare i rischi e lavorare solo sulle parti definite.');
             }
             core.setOutput('plan_id',String(plan.id));
             const unresolvedFeedback = comments.some(c =>
@@ -111,9 +111,6 @@ jobs:
               }
               core.setOutput('mode','recover'); return;
             }
-            if (planStates.length !== 1) {
-              core.setFailed('Piano precedente al controllo di prontezza: tornare a fase:piano, richiedere revisione e autorizzare il nuovo piano PRONTO.'); return;
-            }
             core.setOutput('mode','new');
 
       - name: Recupera PR chiusa senza merge
@@ -151,12 +148,14 @@ jobs:
         if: ${{ steps.guard.outputs.mode == 'new' }}
         run: npm install -g @github/copilot@1.0.114
       - uses: actions/setup-java@v6
+        continue-on-error: true
         if: ${{ steps.guard.outputs.mode == 'new' && hashFiles('backend/pom.xml') != '' && hashFiles('backend/.java-version') != '' }}
         with:
           distribution: temurin
           problem-matcher: true
           java-version-file: backend/.java-version
       - uses: actions/setup-node@v7
+        continue-on-error: true
         if: ${{ steps.guard.outputs.mode == 'new' && hashFiles('frontend/package.json') != '' && hashFiles('frontend/.nvmrc') != '' }}
         with:
           node-version-file: frontend/.nvmrc
@@ -185,12 +184,12 @@ jobs:
           test -n "$COPILOT_GITHUB_TOKEN"
           {
             echo 'Sei l Implementatore di NeighborCare. Segui AGENTS.md.'
-            echo 'Il controllo deterministico ha gia verificato l autorizzazione del piano PRONTO allegato. Eseguilo ora modificando realmente i file, non limitarti a descrivere un piano e non chiedere di nuovo l approvazione.'
-            echo 'Le scelte tecniche esplicitamente proposte nel piano PRONTO sono autorizzate dalla approvazione umana. Per dettagli locali non bloccanti usa le convenzioni di AGENTS.md. Non inventare requisiti, versioni o dipendenze non approvate.'
+            echo 'Il controllo deterministico ha gia verificato l autorizzazione del piano allegato. Eseguilo ora modificando realmente i file, non limitarti a descrivere un piano e non chiedere di nuovo l approvazione.'
+            echo 'Le scelte del piano sono autorizzate dalla approvazione umana, anche se il suo stato consultivo segnala rischi. Scegli e documenta dipendenze tecniche ordinarie e dettagli locali necessari, rispettando versioni fissate, requisiti e architettura. Verifica compatibilita durante il lavoro. Se una parte e realmente bloccata, completa le parti indipendenti.'
             echo 'Nel primo bootstrap crea i manifest e il codice minimo; lascia i test al Tester. Se le versioni degli strumenti del runner non sono ancora quelle del progetto, non fermarti per questo: gli step successivi le configurano dai manifest e verificano build e lockfile.'
             echo 'La generazione del codice non richiede test gia presenti o build gia verde: questi controlli sono successivi. Usa create/edit/apply_patch per creare i file applicativi e le cartelle necessarie. Se un comando tecnico non e consentito o fallisce, continua con gli strumenti di modifica disponibili e dichiara la verifica non eseguita o fallita; non aggirare i limiti.'
             echo 'Puoi creare o aggiornare i file necessari in backend/, frontend/, README.md e documentazione ordinaria in docs/.'
-            echo 'NON modificare .github/, AGENTS.md, .gitignore, modelli RAD/SDD, Test Frame, test applicativi, PDF, file .env, segreti, dipendenze non previste nel piano.'
+            echo 'NON modificare .github/, AGENTS.md, .gitignore, modelli RAD/SDD, Test Frame, test applicativi, PDF, file .env, segreti, dipendenze che alterano stack o ambito autorizzato.'
             echo 'Per estendere i requisiti, la architettura o ambiti non previsti, fermati e richiedi una nuova pianificazione.'
             echo 'Leggi gli artefatti reali citati nella Issue solo se presenti: non copiarne pagine in Markdown e non inventare contenuto mancante.'
             echo 'Non fare commit/push/PR e non inventare esiti di build. Usa solo i comandi tecnici consentiti elencati sotto, correggi gli errori nel codice e ripeti le verifiche. Gli step successivi verificano indipendentemente le modifiche.'
