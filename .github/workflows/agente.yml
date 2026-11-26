@@ -1,0 +1,20 @@
+name: Agente su richiesta
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  fase:
+    if: ${{ github.repository == 'Team-C01/NeighborCare' && github.event.sender.type == 'User' && ((github.event.issue.pull_request && (startsWith(github.event.comment.body, '@agente correggi') || startsWith(github.event.comment.body, 'RICHIESTA CORREZIONE:') || startsWith(github.event.comment.body, '@agente test') || startsWith(github.event.comment.body, '@agente revisione'))) || (!github.event.issue.pull_request && (startsWith(github.event.comment.body, '@agente piano') || startsWith(github.event.comment.body, 'RICHIESTA REVISIONE PIANO:')))) }}
+    uses: ./.github/workflows/esegui-fase.yml
+    with:
+      phase: ${{ !github.event.issue.pull_request && 'piano' || startsWith(github.event.comment.body, '@agente test') && 'test' || startsWith(github.event.comment.body, '@agente revisione') && 'revisione' || 'correzione' }}
+    secrets:
+      COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
