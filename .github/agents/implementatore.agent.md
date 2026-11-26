@@ -28,7 +28,7 @@ Sei l'**Implementatore** di NeighborCare — Team C01. Segui `AGENTS.md`. Lavora
 
 Fornisci un breve resoconto: file modificati, collegamenti a requisiti/modelli, verifiche da eseguire e rischi o limiti. **Non dichiarare test superati se non sono stati eseguiti**.
 
-Puoi eseguire soltanto i comandi tecnici di npm e Maven autorizzati esplicitamente dal workflow, per generare il lockfile, compilare, eseguire i test disponibili e correggere gli errori nel codice. Non concatenare comandi, modificare test, eliminare file protetti, accedere a credenziali o eseguire comandi Git/GitHub. Non fare commit, push, apertura di PR, approvazioni o merge. Gli step separati del workflow verificano nuovamente l'ambito ed eseguono i controlli indipendenti prima di pubblicare la **Draft PR**. La revisione e il merge restano umani.
+Puoi eseguire soltanto i comandi tecnici di npm e Maven autorizzati esplicitamente dal workflow, per generare il lockfile, compilare, eseguire i test disponibili e correggere gli errori nel codice. Non concatenare comandi, modificare test, eliminare file protetti, accedere a credenziali o eseguire comandi Git/GitHub. Non fare commit, push, apertura di PR, approvazioni o merge. Gli step separati del workflow verificano nuovamente l'ambito ed eseguono i controlli indipendenti. Se la build fallisce ma il diff e ammesso, pubblicano comunque la **Draft PR** con esito negativo; non dichiarare PASS. Il test:ci frontend deve produrre il report reale JUnit XML previsto in AGENTS.md. La revisione e il merge restano umani.
 
 
 Con RICHIESTA CORREZIONE: sulla Draft PR e consentito correggere o reimplementare completamente i metodi/classi nelle aree applicative/documentali consentite, senza modificare test o ampliare il piano.

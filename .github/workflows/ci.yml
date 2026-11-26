@@ -70,7 +70,7 @@ jobs:
             test -s backend/.java-version || {
               echo "::error::Bootstrap Java incompleto: manca backend/.java-version"; exit 1;
             }
-            (cd backend && mvn -B verify)
+            (cd backend && mvn -B clean verify)
           else
             echo "::notice::Backend non inizializzato: nessuna build o test Maven eseguito."
           fi
@@ -90,7 +90,41 @@ jobs:
             cd frontend
             npm ci
             npm run build
+            mkdir -p test-results
+            rm -f test-results/junit.xml
             npm run test:ci
           else
             echo "::notice::Frontend non inizializzato: nessuna build o test frontend eseguito."
           fi
+      - name: Verifica numero reale di test eseguiti per stack
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          import sys
+
+          checks = []
+          if Path("backend/pom.xml").is_file():
+              checks.append(("Backend", list(Path("backend/target/surefire-reports").glob("TEST-*.xml")) +
+                            list(Path("backend/target/failsafe-reports").glob("TEST-*.xml"))))
+          if Path("frontend/package.json").is_file():
+              checks.append(("Frontend", [Path("frontend/test-results/junit.xml")]))
+          failed = False
+          for name, reports in checks:
+              total = skipped = errors = 0
+              try:
+                  for report in reports:
+                      for case in ET.parse(report).getroot().iter("testcase"):
+                          total += 1
+                          skipped += case.find("skipped") is not None
+                          errors += case.find("failure") is not None or case.find("error") is not None
+              except (OSError, ET.ParseError) as exc:
+                  print(f"{name}: report non valido: {exc}")
+                  failed = True
+              executed = total - skipped
+              print(f"{name}: eseguiti={executed}, falliti/errori={errors}, saltati={skipped}")
+              if executed <= 0 or errors:
+                  failed = True
+          if failed:
+              sys.exit("Test mancanti, non eseguiti o falliti.")
+          PY

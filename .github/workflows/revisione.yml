@@ -40,10 +40,21 @@ jobs:
             const {data:issue}=await github.rest.issues.get({...context.repo,issue_number:Number(linked[1])});
             const assignedMembers=(issue.assignees||[]).map(u=>u.login.toLowerCase()).sort();
             if (issue.state!=='open' || !assignedMembers.length ||
-                JSON.stringify(assignedMembers)!==JSON.stringify(frozen) ||
+                !issue.labels.some(l=>l.name==='fase:implementazione') ||
                 !assignedMembers.includes((context.actor||'').toLowerCase())) {
               core.setFailed('Solo uno degli assegnatari puo rendere Ready for review.'); return;
             }
+            const issueComments=await github.paginate(github.rest.issues.listComments,{...context.repo,issue_number:Number(linked[1]),per_page:100});
+            const latestPlan=issueComments.filter(c=>c.user?.login==='github-actions[bot]' && (c.body||'').startsWith('## Piano proposto dal Pianificatore AI')).at(-1);
+            const approval=latestPlan && issueComments.filter(c=>assignedMembers.includes((c.user?.login||'').toLowerCase()) && c.created_at>latestPlan.created_at && (c.body||'').startsWith('AUTORIZZA PIANO:')).at(-1);
+            const pending=latestPlan && issueComments.some(c=>assignedMembers.includes((c.user?.login||'').toLowerCase()) && c.created_at>latestPlan.created_at && (c.body||'').startsWith('RICHIESTA REVISIONE PIANO:'));
+            const events=await github.paginate(github.rest.issues.listEvents,{...context.repo,issue_number:Number(linked[1]),per_page:100});
+            const assignmentChange=events.filter(e=>['assigned','unassigned'].includes(e.event)).at(-1);
+            if (!approval || pending || (assignmentChange && approval.created_at<assignmentChange.created_at)) {
+              core.setFailed('Serve una nuova autorizzazione del piano da un assegnatario attuale.'); return;
+            }
+            const {data:approverPerm}=await github.rest.repos.getCollaboratorPermissionLevel({...context.repo,username:approval.user.login});
+            if (!['write','maintain','admin'].includes(approverPerm.permission)) { core.setFailed('Autorizzante senza Write.'); return; }
             const comments=await github.paginate(github.rest.issues.listComments,{
               ...context.repo,issue_number:pr.number,per_page:100
             });
@@ -52,7 +63,7 @@ jobs:
                 (c.body||'').includes('Commit esaminato: '+pr.head.sha) ||
                (c.body||'').startsWith('## Tester indipendente — PR #'+pr.number) &&
                 (c.body||'').includes('Commit dopo il test: '+pr.head.sha))).at(-1);
-            if (!tested || ((tested.body||'').startsWith('## Tester indipendente — PR #') &&
+            if (!tested || tested.created_at<approval.created_at || ((tested.body||'').startsWith('## Tester indipendente — PR #') &&
                 !/Risultato dei test automatici \(exit code\):\s*0\b/.test(tested.body||''))) {
               core.setFailed('Eseguire e superare il Tester prima di Ready for review.'); return;
             }

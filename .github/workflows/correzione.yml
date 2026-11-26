@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - name: Autorizza correzione TM, ambito e massimo tre tentativi
+      - name: Autorizza correzione TM e ambito
         id: guard
         uses: actions/github-script@v9
         with:
@@ -47,8 +47,7 @@ jobs:
               ?.split(',').map(s=>s.trim().replace(/^@/,'').toLowerCase()).sort();
             const approver=(pr.body||'').match(/^Autorizzante: @([A-Za-z0-9-]+)$/m)?.[1]?.toLowerCase();
             if (issue.state!=='open' || !assignedMembers.size || !frozen || !approver ||
-                !assignedMembers.has(approver) ||
-                JSON.stringify([...assignedMembers].sort())!==JSON.stringify(frozen)) {
+                !issue.labels.some(l=>l.name==='fase:implementazione')) {
               core.setFailed('Issue e assegnatari devono corrispondere alla PR autorizzata.'); return;
             }
             const {data:reviewList}=await github.rest.pulls.listReviews({...context.repo,pull_number:prNumber,per_page:100});
@@ -74,9 +73,7 @@ jobs:
                 /Risultato dei test automatici \(exit code\):\s*0\b/.test(c.body||'')))).at(-1);
             const attempts=prComments.filter(c=>/^RICHIESTA CORREZIONE:/m.test(c.body||'') &&
               (!lastPassed || c.created_at>lastPassed.created_at));
-            if (attempts.length>3) {
-              core.setFailed('Raggiunto limite di 3 correzioni consecutive senza test superati: escalation manuale.'); return;
-            }
+            if (attempts.length>3) core.warning('Piu di tre correzioni senza test positivi: valutare un intervento umano.');
             const comments=await github.paginate(github.rest.issues.listComments,{
               ...context.repo,issue_number:issueNumber,per_page:100
             });
@@ -89,14 +86,19 @@ jobs:
             }
             const approval=comments.filter(c=>assignedMembers.has((c.user?.login||'').toLowerCase()) &&
               c.created_at>plan.created_at && /^AUTORIZZA PIANO:/m.test(c.body||'')).at(-1);
-            if (!approval) { core.setFailed('Approvazione del piano corrente assente.'); return; }
+            if (!approval) { core.setFailed('Approvazione del piano corrente assente: uno degli assegnatari attuali deve autorizzarlo.'); return; }
+            const events=await github.paginate(github.rest.issues.listEvents,{...context.repo,issue_number:issueNumber,per_page:100});
+            const assignmentChange=events.filter(e=>['assigned','unassigned'].includes(e.event)).at(-1);
+            if (assignmentChange && approval.created_at<assignmentChange.created_at) {
+              core.setFailed('Assegnatari cambiati: nuova AUTORIZZA PIANO richiesta.'); return;
+            }
             const {data:approvalPerm}=await github.rest.repos.getCollaboratorPermissionLevel({
               ...context.repo,username:approval.user.login
             });
             if (!['write','maintain','admin'].includes(approvalPerm.permission)) {
               core.setFailed('Autorizzante privo di Write.'); return;
             }
-            core.notice('Correzione entro il piano originariamente autorizzato; file applicativi e documentali consentiti.');
+            core.notice('Correzione entro l ultimo piano autorizzato; file applicativi e documentali consentiti.');
             core.setOutput('skip','false');
             core.setOutput('pr_branch',pr.head.ref);
             core.setOutput('pr_sha',pr.head.sha);
@@ -150,7 +152,7 @@ jobs:
           {
             cat AGENTS.md .github/agents/implementatore.agent.md
             echo 'Sei l Implementatore. Correggi o reimplementa nell ambito del piano il problema riportato dall assegnatario sulla Draft PR esistente.'
-            echo 'La autorizzazione AUTORIZZA PIANO: non richiede una lista di file; segui rigorosamente i requisiti e il piano approvati.'
+            echo 'La autorizzazione AUTORIZZA PIANO: non richiede una lista di file; segui rigorosamente i requisiti e l ultimo piano approvato, anche se revisionato dopo apertura PR.'
             echo 'Puoi correggere o reimplementare nei file applicativi backend/, frontend/ e nella documentazione ordinaria (README.md, docs/).'
             echo 'Non modificare test, Test Frame, governance, modelli RAD/SDD, PDF, segreti, .env o dipendenze non approvate.'
             echo 'Non modificare i requisiti e non indebolire le asserzioni. Usa solo i comandi tecnici consentiti elencati sotto per riprodurre gli errori, correggere il codice e ripetere le verifiche.'
@@ -219,6 +221,8 @@ jobs:
             esac
           done < <(git diff --cached --no-renames --name-only -z)
       - uses: actions/setup-java@v6
+        id: final_java
+        continue-on-error: true
         if: ${{ steps.guard.outputs.skip == 'false' && hashFiles('backend/pom.xml') != '' }}
         with:
           distribution: temurin
@@ -227,21 +231,25 @@ jobs:
           cache: maven
           cache-dependency-path: backend/pom.xml
       - uses: actions/setup-node@v7
+        id: final_node
+        continue-on-error: true
         if: ${{ steps.guard.outputs.skip == 'false' && hashFiles('frontend/package.json') != '' }}
         with:
           node-version-file: frontend/.nvmrc
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          package-manager-cache: false
       - name: Registra build e test disponibili senza mascherare gli errori
         if: ${{ steps.guard.outputs.skip == 'false' }}
+        env:
+          JAVA_SETUP: ${{ steps.final_java.outcome }}
+          NODE_SETUP: ${{ steps.final_node.outcome }}
         run: |
           set -uo pipefail
           status=0
           if [ -f backend/pom.xml ]; then
-            (cd backend && mvn -B verify) || status=1
+            ([ "$JAVA_SETUP" = success ] && cd backend && mvn -B verify) || status=1
           fi
           if [ -f frontend/package.json ]; then
-            (cd frontend && npm ci && npm run build && npm run test:ci) || status=1
+            ([ "$NODE_SETUP" = success ] && cd frontend && npm ci && npm run build && npm run test:ci) || status=1
           fi
           echo "$status" > "$RUNNER_TEMP/check-status.txt"
           if [ "$status" -ne 0 ]; then

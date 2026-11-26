@@ -38,10 +38,21 @@ jobs:
             const {data:assignedIssue}=await github.rest.issues.get({...context.repo,issue_number:Number(linked[1])});
             const assignedMembers=(assignedIssue.assignees||[]).map(u=>u.login.toLowerCase()).sort();
             if (assignedIssue.state!=='open' || !assignedMembers.length ||
-                JSON.stringify(assignedMembers)!==JSON.stringify(frozen) ||
+                !assignedIssue.labels.some(l=>l.name==='fase:implementazione') ||
                 !assignedMembers.includes((context.actor||'').toLowerCase())) {
-              core.setFailed('Solo un assegnatario puo avviare il Tester con assegnazione invariata.'); return;
+              core.setFailed('Solo un assegnatario attuale puo avviare il Tester in fase di implementazione.'); return;
             }
+            const issueComments=await github.paginate(github.rest.issues.listComments,{...context.repo,issue_number:Number(linked[1]),per_page:100});
+            const latestPlan=issueComments.filter(c=>c.user?.login==='github-actions[bot]' && (c.body||'').startsWith('## Piano proposto dal Pianificatore AI')).at(-1);
+            const approval=latestPlan && issueComments.filter(c=>assignedMembers.includes((c.user?.login||'').toLowerCase()) && c.created_at>latestPlan.created_at && (c.body||'').startsWith('AUTORIZZA PIANO:')).at(-1);
+            const pending=latestPlan && issueComments.some(c=>assignedMembers.includes((c.user?.login||'').toLowerCase()) && c.created_at>latestPlan.created_at && (c.body||'').startsWith('RICHIESTA REVISIONE PIANO:'));
+            const events=await github.paginate(github.rest.issues.listEvents,{...context.repo,issue_number:Number(linked[1]),per_page:100});
+            const assignmentChange=events.filter(e=>['assigned','unassigned'].includes(e.event)).at(-1);
+            if (!approval || pending || (assignmentChange && approval.created_at<assignmentChange.created_at)) {
+              core.setFailed('Serve una nuova autorizzazione del piano da un assegnatario attuale.'); return;
+            }
+            const {data:approverPerm}=await github.rest.repos.getCollaboratorPermissionLevel({...context.repo,username:approval.user.login});
+            if (!['write','maintain','admin'].includes(approverPerm.permission)) { core.setFailed('Autorizzante senza Write.'); return; }
             const files=await github.paginate(github.rest.pulls.listFiles,{
               ...context.repo,pull_number:pr.number,per_page:100
             });
@@ -201,14 +212,49 @@ jobs:
           set -uo pipefail
           status=0
           if [ -f backend/pom.xml ]; then
-            (cd backend && mvn -B verify) || status=1
+            (cd backend && mvn -B clean verify) || status=1
           fi
           if [ -f frontend/package.json ]; then
-            (cd frontend && npm ci && npm run build && npm run test:ci) || status=1
+            (cd frontend && npm ci && npm run build && mkdir -p test-results && rm -f test-results/junit.xml && npm run test:ci) || status=1
           fi
           echo "$status" > "$RUNNER_TEMP/test-exit.txt"
-          if [ "$status" -eq 1 ]; then
-            echo "::warning::Test falliti: correggere il codice, non indebolire i test."
+      - name: Verifica numero di test effettivamente eseguiti
+        if: ${{ steps.guard.outputs.docs_only == 'false' }}
+        run: |
+          set -uo pipefail
+          python3 - <<'PY' > "$RUNNER_TEMP/test-counts.txt" 2>&1 || echo 1 > "$RUNNER_TEMP/test-exit.txt"
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          import sys
+
+          checks = []
+          if Path("backend/pom.xml").is_file():
+              checks.append(("Backend", list(Path("backend/target/surefire-reports").glob("TEST-*.xml")) +
+                            list(Path("backend/target/failsafe-reports").glob("TEST-*.xml"))))
+          if Path("frontend/package.json").is_file():
+              checks.append(("Frontend", [Path("frontend/test-results/junit.xml")]))
+          failed = False
+          for name, reports in checks:
+              total = skipped = errors = 0
+              try:
+                  for report in reports:
+                      for case in ET.parse(report).getroot().iter("testcase"):
+                          total += 1
+                          skipped += case.find("skipped") is not None
+                          errors += case.find("failure") is not None or case.find("error") is not None
+              except (OSError, ET.ParseError) as exc:
+                  print(f"{name}: report non valido: {exc}")
+                  failed = True
+              executed = total - skipped
+              print(f"{name}: eseguiti={executed}, falliti/errori={errors}, saltati={skipped}")
+              if executed <= 0 or errors:
+                  failed = True
+          if failed:
+              sys.exit("Test mancanti, non eseguiti o falliti.")
+          PY
+          cat "$RUNNER_TEMP/test-counts.txt"
+          if [ "$(cat "$RUNNER_TEMP/test-exit.txt")" -eq 1 ]; then
+            echo "::warning::Test falliti o mancanti: correggere codice o configurazione senza indebolire i test."
           fi
       - name: Verifica SHA e pubblica solo le modifiche ai test
         if: ${{ steps.guard.outputs.docs_only == 'false' }}
@@ -240,6 +286,8 @@ jobs:
             git diff --name-status "$EXPECTED_SHA" HEAD;
             printf '\n';
             cat "$RUNNER_TEMP/tester.md";
+            printf '\nConteggio test verificato dal workflow:\n';
+            cat "$RUNNER_TEMP/test-counts.txt";
             printf '\nRun Tester: %s\n' "$GITHUB_RUN_ID";
             printf '\nRisultato dei test automatici (exit code): ';
             cat "$RUNNER_TEMP/test-exit.txt";
@@ -258,9 +306,6 @@ jobs:
             const existing=await github.paginate(github.rest.issues.listComments,{
               ...context.repo,issue_number:n,per_page:100
             });
-            if (existing.some(c=>(c.body||'').startsWith('## Tester indipendente — verifica documentale') &&
-                (c.body||'').includes('Commit esaminato: '+context.payload.pull_request.head.sha))) {
-              core.notice('Report N/A gia presente: non duplicare.'); return;
-            }
+            // Una nuova richiesta esplicita pubblica un report N/A aggiornato anche sullo stesso SHA.
             await github.rest.issues.createComment({...context.repo,issue_number:n,
               body:'## Tester indipendente — verifica documentale\n\nCommit esaminato: '+context.payload.pull_request.head.sha+'\nRun Tester: '+context.runId+'\n\nLa PR contiene solo documentazione o governance. Test Frame applicativi N/A: controllare il diff, i collegamenti e i documenti in review. Non sono stati generati test fittizi.'});
