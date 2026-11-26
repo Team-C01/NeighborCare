@@ -188,6 +188,7 @@ jobs:
             echo 'Il controllo deterministico ha gia verificato l autorizzazione del piano PRONTO allegato. Eseguilo ora modificando realmente i file, non limitarti a descrivere un piano e non chiedere di nuovo l approvazione.'
             echo 'Le scelte tecniche esplicitamente proposte nel piano PRONTO sono autorizzate dalla approvazione umana. Per dettagli locali non bloccanti usa le convenzioni di AGENTS.md. Non inventare requisiti, versioni o dipendenze non approvate.'
             echo 'Nel primo bootstrap crea i manifest e il codice minimo; lascia i test al Tester. Se le versioni degli strumenti del runner non sono ancora quelle del progetto, non fermarti per questo: gli step successivi le configurano dai manifest e verificano build e lockfile.'
+            echo 'La generazione del codice non richiede test gia presenti o build gia verde: questi controlli sono successivi. Usa create/edit/apply_patch per creare i file applicativi e le cartelle necessarie. Se un comando tecnico non e consentito o fallisce, continua con gli strumenti di modifica disponibili e dichiara la verifica non eseguita o fallita; non aggirare i limiti.'
             echo 'Puoi creare o aggiornare i file necessari in backend/, frontend/, README.md e documentazione ordinaria in docs/.'
             echo 'NON modificare .github/, AGENTS.md, .gitignore, modelli RAD/SDD, Test Frame, test applicativi, PDF, file .env, segreti, dipendenze non previste nel piano.'
             echo 'Per estendere i requisiti, la architettura o ambiti non previsti, fermati e richiedi una nuova pianificazione.'
@@ -211,16 +212,28 @@ jobs:
             echo '===== FINE DATI ====='
             echo 'Esegui le attivita del piano autorizzato entro i vincoli sopra. Se un blocco reale impedisce ogni modifica, indica nel report il vincolo preciso, l operazione tentata e la decisione necessaria. Non simulare file o test.'
           } > "$RUNNER_TEMP/prompt.txt"
-          copilot -p "$(cat "$RUNNER_TEMP/prompt.txt")" -s --model=auto --no-ask-user --no-auto-update \
-            --disable-builtin-mcps --available-tools='view,grep,glob,read,edit,create,write,apply_patch,bash' \
-            --allow-tool='edit,write,apply_patch' \
-            --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend install --package-lock-only --ignore-scripts --no-audit --no-fund)' \
-            --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend ci)' \
-            --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend run build)' \
-            --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend run test:ci)' \
-            --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN mvn -B -f backend/pom.xml verify)' \
-            --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN mvn -B -f backend/pom.xml test)' \
-            --deny-tool='shell(git:*),shell(gh:*),shell(rm:*),shell(sudo:*),shell(curl:*),shell(wget:*)' > "$RUNNER_TEMP/report.md" 2> "$RUNNER_TEMP/agent-stderr.log"
+          run_agent() {
+            copilot -p "$1" -s --model=auto --no-ask-user --no-auto-update \
+              --disable-builtin-mcps --available-tools='view,grep,glob,read,edit,create,write,apply_patch,bash' \
+              --allow-tool='write' --allow-tool='read' \
+              --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend install --package-lock-only --ignore-scripts --no-audit --no-fund)' \
+              --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend ci)' \
+              --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend run build)' \
+              --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend run test:ci)' \
+              --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN mvn -B -f backend/pom.xml verify)' \
+              --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN mvn -B -f backend/pom.xml test)' \
+              --deny-tool='shell(git:*),shell(gh:*),shell(rm:*),shell(sudo:*),shell(curl:*),shell(wget:*)'
+          }
+          run_agent "$(cat "$RUNNER_TEMP/prompt.txt")" > "$RUNNER_TEMP/report.md" 2> "$RUNNER_TEMP/agent-stderr.log"
+          if [ -z "$(git status --porcelain --untracked-files=normal)" ]; then
+            echo '::notice::Primo tentativo senza modifiche: un solo nuovo tentativo guidato entro lo stesso piano.'
+            cp "$RUNNER_TEMP/report.md" "$RUNNER_TEMP/first-report.md"
+            {
+              cat "$RUNNER_TEMP/prompt.txt"
+              printf '\nIl primo tentativo non ha prodotto modifiche. Crea ora concretamente i file autorizzati mediante gli strumenti di scrittura. Non richiedere test iniziali o una seconda approvazione. Se esiste un blocco reale di requisiti o dipendenze, dichiaralo senza aggirare i vincoli.\n'
+            } > "$RUNNER_TEMP/retry-prompt.txt"
+            run_agent "$(cat "$RUNNER_TEMP/retry-prompt.txt")" > "$RUNNER_TEMP/report.md" 2>> "$RUNNER_TEMP/agent-stderr.log"
+          fi
           test -s "$RUNNER_TEMP/report.md"
       - name: Diagnostica Implementatore anche in caso di errore
         if: ${{ always() && steps.guard.outputs.mode == 'new' && steps.agent.outcome != 'skipped' && steps.agent.outcome != '' }}
@@ -247,6 +260,9 @@ jobs:
           (temp / 'report.md').write_text(report, encoding='utf-8')
           token = uuid.uuid4().hex
           print('::stop-commands::' + token)
+          if (temp / 'first-report.md').is_file():
+              print('=== Report primo tentativo ===')
+              print(safe_report('first-report.md'))
           print('=== Report Implementatore ===')
           print(report)
           if stderr.strip():
