@@ -2,21 +2,24 @@
 set -euo pipefail
 
 # Ephemeral local database; no production credentials, Copilot token or GitHub token.
-test -s backend/pom.xml && test -s backend/.java-version
-test -s frontend/package.json && test -s frontend/package-lock.json && test -s frontend/.nvmrc
+for file in backend/pom.xml backend/.java-version frontend/package.json frontend/package-lock.json frontend/.nvmrc; do
+  test -s "$file" || { echo "Manifest o file versione mancante: $file"; exit 1; }
+done
+project="neighborcare-ci-$"
+compose=(docker compose -p "$project" -f backend/compose.yaml)
 
 db=false
 cleanup() {
   if [[ "$db" == true ]]; then
-    docker compose -f backend/compose.yaml down -v || true
+    "${compose[@]}" down -v || true
   fi
 }
 trap cleanup EXIT
 if [[ -f backend/compose.yaml ]]; then
-  services="$(docker compose -f backend/compose.yaml config --services)"
+  services="$("${compose[@]}" config --services)"
   if grep -qx database <<< "$services"; then
     db=true
-    docker compose -f backend/compose.yaml up -d --wait --wait-timeout 120 database
+    "${compose[@]}" up -d --wait --wait-timeout 120 database
   fi
 fi
 export NEIGHBORCARE_DB_TESTS="$db"
