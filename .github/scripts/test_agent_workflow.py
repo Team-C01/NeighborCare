@@ -1,5 +1,6 @@
 """Tests of deterministic workflow logic (no network or AI calls)."""
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -195,6 +196,30 @@ class ScopeTests(unittest.TestCase):
     def test_ordinary_documentation_allowed(self):
         self.assertTrue(a.permitted_path("implementazione", "docs/guida.md", "A"))
         self.assertFalse(a.permitted_path("correzione", "docs/rad/uc/UC.md", "M"))
+
+    def test_coherence_report_is_not_an_implementation_plan(self):
+        self.assertTrue(a.coherence_only("AGENTE PIANO:\nSOLO COERENZA\nControlla i modelli"))
+        self.assertFalse(a.coherence_only("AGENTE PIANO:\nProponi il piano"))
+        self.assertFalse(a.coherence_only("AGENTE REVISIONE:\nSOLO COERENZA"))
+
+    def test_report_summary_survives_failed_and_missing_tests(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = os.getcwd()
+            try:
+                os.chdir(tmp)
+                Path("backend/target/surefire-reports").mkdir(parents=True)
+                Path("backend/target/surefire-reports/TEST-Failure.xml").write_text(
+                    '<testsuite><testcase><failure/></testcase><testcase/></testsuite>')
+                with patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(Path(tmp) / "summary"),
+                                             "GITHUB_OUTPUT": str(Path(tmp) / "output")}), \
+                     patch.object(v.sys, "argv", ["verify_reports.py", "--summary"]):
+                    self.assertEqual(v.main(), 1)
+                report = Path("summary").read_text()
+                self.assertIn("| Backend | 1 | 1 | 0 |", report)
+                self.assertIn("| Frontend | N/D | N/D | N/D |", report)
+                self.assertIn("backend=1 superati, 1 falliti/errori, 0 saltati", Path("output").read_text())
+            finally:
+                os.chdir(original)
 
     def test_reports_count_skipped_and_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
