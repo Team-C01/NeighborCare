@@ -43,7 +43,7 @@ Il manifest web rende l'app installabile nei browser compatibili, ma non è conf
 4. Controllare la CI e il collaudo; selezionare Ready for review per il Revisore AI consultivo.
 5. Review umana indipendente, CI verde e merge manuale.
 
-In caso di problemi usare `@agente piano` sulla Issue, `@agente correggi`, `@agente test` o `@agente revisione` nella PR. I vecchi prefissi di ripianificazione e correzione sono compatibili. Vedi la [guida operativa](docs/agentic-workflow-iterazioni.md).
+In caso di problemi usare `AGENTE PIANO:` sulla Issue, `AGENTE CORREGGI:`, `AGENTE TEST:` o `AGENTE REVISIONE:` nella PR. Vedi la [guida operativa](docs/agentic-workflow-iterazioni.md).
 
 ## Configurazione
 

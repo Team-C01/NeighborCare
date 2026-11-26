@@ -204,6 +204,29 @@ def ci_evidence(pr):
     except (subprocess.CalledProcessError, KeyError, ValueError):
         return {"state": "CI non disponibile: verificare Actions"}
 
+def planning_history(comments, evidence, limit=65000):
+    """Keep the latest plan and request; include the complete conversation when it fits."""
+    plans = [c for c in comments if c["user"]["login"] == "github-actions[bot]"
+             and (c.get("body") or "").startswith(PLAN_HEADER)]
+    if plans:
+        evidence["previous_plan"] = plans[-1]["body"]
+    history = [{"id": c["id"], "by": c["user"]["login"], "body": c.get("body") or ""}
+               for c in comments]
+    evidence["issue_comments"] = history
+    if len(json.dumps(evidence, ensure_ascii=False, indent=2)) <= limit:
+        return
+    # Retain the newest discussion if the complete history exceeds the budget.
+    evidence["issue_comments"] = []
+    evidence["history_notice"] = "Conversazione parzialmente troncata per limite di contesto."
+    for entry in reversed(history):
+        evidence["issue_comments"].insert(0, entry)
+        if len(json.dumps(evidence, ensure_ascii=False, indent=2)) > limit:
+            evidence["issue_comments"].pop(0)
+            break
+    evidence["history_notice"] += (
+        f" Commenti disponibili: {len(evidence['issue_comments'])}/{len(history)}."
+    )
+
 def prepare():
     ROOT.mkdir(parents=True, exist_ok=True)
     ARTIFACT.mkdir(exist_ok=True)
@@ -219,8 +242,12 @@ def prepare():
                 "plan": plan["body"] if plan else None,
                 "request": EVENT.get("comment", {}).get("body")}
     if issue and not plan:
-        evidence["issue_comments"] = [{"by": c["user"]["login"], "body": bounded(c.get("body") or "", 2500)}
-                                      for c in pages(f"issues/{issue['number']}/comments")[-6:]]
+        comments = pages(f"issues/{issue['number']}/comments")
+        if PHASE == "piano":
+            planning_history(comments, evidence)
+        else:
+            evidence["issue_comments"] = [{"by": c["user"]["login"], "body": bounded(c.get("body") or "", 2500)}
+                                          for c in comments[-6:]]
     if pr:
         evidence["pr"] = {"number": pr["number"], "head": ctx["head"], "body": pr.get("body")}
         evidence["pr_comments"] = [{"by": c["user"]["login"], "body": bounded(c.get("body") or "", 2500)}
@@ -292,7 +319,7 @@ def publish():
     if PHASE == "piano":
         require(not patch, "Pianificatore non puo modificare file")
         comment(issue["number"], f"{PLAN_HEADER}\n\n<!-- neighborcare-plan: {fingerprint(issue)} -->\n\n"
-                f"{report}\n\nPer approvare il piano applicare fase:implementazione; per rivederlo riapplicare fase:piano. [Run]({url})")
+                f"{report}\n\nPer approvare il piano applicare fase:implementazione; per rivederlo usare AGENTE PIANO: seguito dalle osservazioni. [Run]({url})")
         return
     if PHASE == "revisione":
         require(not patch, "Revisore non puo modificare file")
@@ -303,7 +330,7 @@ def publish():
         # Never replace an existing task branch; recover an existing PR by using it.
         existing = pages(f"pulls?state=open&head={REPO.split('/')[0]}:{ctx['branch']}")
         if existing:
-            comment(issue["number"], f"PR gia aperta: #{existing[0]['number']}. Usare @agente correggi nella PR.")
+            comment(issue["number"], f"PR gia aperta: #{existing[0]['number']}. Usare AGENTE CORREGGI: nella PR.")
             return
     checkout(ctx["head"])
     if not patch:
@@ -324,7 +351,7 @@ def publish():
     # Non-force push. Check that a new branch really does not exist.
     if not pr:
         require(not git("ls-remote", "--heads", "origin", f"refs/heads/{ctx['branch']}").strip(),
-                "Branch gia esistente: aprire una PR dal branch e usare @agente correggi")
+                "Branch gia esistente: aprire una PR dal branch e usare AGENTE CORREGGI:")
     else:
         fresh = repo_api(f"pulls/{pr['number']}")
         require(fresh["state"] == "open" and fresh["head"]["sha"] == ctx["head"], "PR cambiata: rilanciare la fase")
