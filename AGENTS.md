@@ -66,6 +66,8 @@ Inventare specifiche, alterare PDF o esempi didattici XX/YY, indebolire test, in
 - Il Ruleset `Protect main - NeighborCare` richiede `repository-checks`, `governance-gate`, review APPROVED e Code Owner review. La bypass list Admin non va utilizzata durante i test.
 - Dopo un nuovo commit ripetere test, Revisore e review; i risultati vecchi non autorizzano il merge.
 
+- Le PR manuali che aggiornano solo gli artefatti testuali `docs/rad/uc/`, `docs/modelli/`, `docs/test/` e `docs/README.md` richiedono CI e review indipendente, non test applicativi o report agentici. Se collegate con `Closes #N`, la Issue deve essere aperta; l'autore deve essere uno degli assegnatari se presenti e il revisore non deve essere assegnato. I PDF restano protetti.
+
 ## Quando un task è finito
 
 Piano autorizzato, modifiche entro ambito, modelli sincronizzati e controlli disponibili superati, con esiti e limiti riportati nella PR. Ogni frame pertinente ha un test o una verifica manuale motivata. Prima del merge serve review umana di una persona diversa dall'autore; l'autore deve saper spiegare il risultato.
