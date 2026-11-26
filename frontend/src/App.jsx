@@ -1,3 +1,5 @@
+import PresentazioneRuoli from './components/PresentazioneRuoli';
+
 function App() {
   return (
     <main className="pagina-iniziale">
@@ -8,6 +10,7 @@ function App() {
           La piattaforma per coordinare commissioni di vicinato non sanitarie.
         </p>
       </section>
+      <PresentazioneRuoli />
     </main>
   );
 }
