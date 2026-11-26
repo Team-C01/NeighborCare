@@ -45,26 +45,15 @@ jobs:
             const files=await github.paginate(github.rest.pulls.listFiles,{
               ...context.repo,pull_number:pr.number,per_page:100
             });
-            if (files.length===0 || files.length>80) {
-              core.setFailed('Diff vuota o troppo grande per un test indipendente affidabile.'); return;
-            }
+            if (files.length===0) { core.setFailed('Diff vuota.'); return; }
+            if (files.length>80) core.warning('PR ampia: verificare la copertura dei Test Frame in review.');
             const docsOnly=files.every(f=>
               (f.filename==='README.md' || f.filename==='AGENTS.md' ||
                f.filename==='.gitignore' || f.filename.startsWith('.github/') ||
                f.filename.startsWith('docs/')) && !f.filename.endsWith('.pdf')
             );
             core.setOutput('head_sha',pr.head.sha);
-            if (!docsOnly) {
-              const comments=await github.paginate(github.rest.issues.listComments,{
-                ...context.repo,issue_number:pr.number,per_page:100
-              });
-              if (comments.some(c=>c.user?.login==='github-actions[bot]' &&
-                  (c.body||'').startsWith('## Tester indipendente — PR #') &&
-                  (c.body||'').includes('Commit di partenza: '+pr.head.sha))) {
-                core.notice('Tester gia eseguito per lo stesso commit.');
-                core.setOutput('docs_only','already'); return;
-              }
-            }
+            // Una nuova richiesta fase:test esegue sempre una nuova verifica, anche sullo stesso SHA.
             core.setOutput('docs_only',String(docsOnly));
             if (docsOnly) { core.notice('PR solo documentale o di governance: nessun test applicativo inventato.'); return; }
             const matches=(pr.body||'').match(/\b(?:Closes|Fixes|Refs)\s+#(\d+)\b/i);
@@ -119,7 +108,7 @@ jobs:
             gh issue view "$issue" --repo "$GITHUB_REPOSITORY" --json number,title,body > "$RUNNER_TEMP/issue.json"
             break
           done
-      - name: Genera solo nuovi test da UC e Test Frame ed esegui le verifiche consentite
+      - name: Genera o aggiorna test da UC e Test Frame ed esegui le verifiche consentite
         if: ${{ steps.guard.outputs.docs_only == 'false' }}
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
@@ -136,9 +125,9 @@ jobs:
             echo 'Quando i requisiti e le firme sono sufficienti, CREA FISICAMENTE i file di test con gli strumenti write/edit/apply_patch disponibili. Non limitarti a descrivere il codice nella risposta.'
             echo 'Se il backend ha src/main/java e pom.xml, scrivi test JUnit 5 effettivi sotto backend/src/test/java nel package coerente, con asserzioni per ogni TF pertinente non ancora coperto.'
             echo 'Aggiungi test solo per Test Frame NON gia coperti; evita duplicati dopo correzioni precedenti.'
-            echo 'Se i test esistenti coprono gia i frame, non scrivere nuovi file: il workflow li rieseguira.'
+            echo 'Se i test esistenti sono corretti e coprono i frame, riusali. Puoi correggere e aggiornare test esistenti se errati, fragili, incompleti o superati da specifiche approvate. Motiva ogni modifica con ID del frame, atteso e ragione; non cambiare un atteso solo per far passare il codice.'
             echo 'Crea eventuali nuovi test in backend/src/test/, frontend/tests/ o frontend/src/ con suffisso .test.* o .spec.*.'
-            echo 'Non modificare codice applicativo, test esistenti, manifest, workflow, esempi didattici o PDF; non fare commit o push. Puoi eseguire soltanto i comandi di installazione da lockfile e verifica elencati sotto. Se falliscono, riporta il risultato senza correggere il codice o indebolire i test.'
+            echo 'Non modificare codice applicativo, manifest, workflow, esempi didattici o PDF; non fare commit o push. Puoi eseguire soltanto i comandi di installazione da lockfile e verifica elencati sotto. Se falliscono, distingui difetti del codice da difetti dimostrabili del test; non correggere codice o indebolire le asserzioni.'
             echo 'Comando consentito (da root): env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend ci'
             echo 'Comando consentito (da root): env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend run build'
             echo 'Comando consentito (da root): env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend run test:ci'
@@ -160,14 +149,15 @@ jobs:
             --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN mvn -B -f backend/pom.xml test)' \
             --deny-tool='shell(git:*),shell(gh:*),shell(rm:*),shell(sudo:*),shell(curl:*),shell(wget:*)' > "$RUNNER_TEMP/tester.md"
           test -s "$RUNNER_TEMP/tester.md"
-      - name: Rifiuta modifiche non ammesse e prepara solo nuovi test
+      - name: Verifica che il Tester abbia modificato soltanto file di test
         if: ${{ steps.guard.outputs.docs_only == 'false' }}
         run: |
           set -euo pipefail
-          git diff --exit-code HEAD
-          git diff --cached --exit-code HEAD
-          test -z "$(git ls-files --deleted)" || { echo "::error::File eliminato"; exit 1; }
-          count=0
+          git add --all
+          git diff --cached --check
+          if git diff --cached --no-renames --summary | grep -E 'mode 120000'; then
+            echo '::error::Symlink non ammesso'; exit 1
+          fi
           while IFS= read -r -d '' file; do
             case "$file" in
               backend/src/test/*|frontend/tests/*) ;;
@@ -177,26 +167,20 @@ jobs:
                 } ;;
               *) echo "::error::File fuori dal ruolo Tester: $file"; exit 1 ;;
             esac
-            test ! -L "$file" || { echo "::error::Symlink non ammesso"; exit 1; }
-            git add -- "$file"
-            count=$((count+1))
-          done < <(git ls-files --others --exclude-standard -z)
-          if [ "$count" -eq 0 ]; then
-            if ! git ls-files backend/src/test frontend/tests frontend/src | \
-                grep -E '^(backend/src/test/.*\.(java|kt)|frontend/tests/.*\.(test|spec)\.[A-Za-z0-9]+|frontend/src/.*\.(test|spec)\.[A-Za-z0-9]+)$' >/dev/null; then
-              echo '::group::Motivazione del Tester AI (nessun file generato)'
-              if [ -s "$RUNNER_TEMP/tester.md" ]; then
-                sed -n '1,180p' "$RUNNER_TEMP/tester.md"
-              else
-                echo 'Il Tester AI non ha prodotto un report testuale.'
-              fi
-              echo '::endgroup::'
-              echo "::error::Il Tester non ha creato test eseguibili. Verificare nel report sopra quali specifiche o firme mancano; non segnare il task come superato."
-              exit 1
-            fi
-            echo '::notice::Nessun nuovo test necessario: riesecuzione dei test presenti.'
+          done < <(git diff --cached --no-renames --name-only -z)
+          # Per rimuovere o rinominare test obsoleti serve una modifica manuale tracciata.
+          test -z "$(git diff --cached --no-renames --name-only --diff-filter=D)" || {
+            echo '::error::Rimozione di test: effettuare una modifica manuale motivata sul branch della PR.'; exit 1;
+          }
+          if ! git ls-files backend/src/test frontend/tests frontend/src | grep -E '^(backend/src/test/.*\.(java|kt)|frontend/tests/.*\.(test|spec)\.[A-Za-z0-9]+|frontend/src/.*\.(test|spec)\.[A-Za-z0-9]+)$' >/dev/null; then
+            echo '::error::Nessun test eseguibile presente; controllare i Test Frame e il report.'
+            sed -n '1,180p' "$RUNNER_TEMP/tester.md"
+            exit 1
           fi
-          git diff --cached --check
+          git diff --cached --stat
+          if git diff --cached --quiet; then
+            echo '::notice::Nessuna modifica ai test necessaria: rieseguo i test presenti.'
+          fi
       - uses: actions/setup-java@v6
         if: ${{ steps.guard.outputs.docs_only == 'false' && hashFiles('backend/pom.xml') != '' }}
         with:
@@ -226,7 +210,7 @@ jobs:
           if [ "$status" -eq 1 ]; then
             echo "::warning::Test falliti: correggere il codice, non indebolire i test."
           fi
-      - name: Verifica SHA e pubblica solo i nuovi test
+      - name: Verifica SHA e pubblica solo le modifiche ai test
         if: ${{ steps.guard.outputs.docs_only == 'false' }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -239,6 +223,8 @@ jobs:
           test "$actual" = "$EXPECTED_SHA" || {
             echo "::error::Il branch e cambiato durante i test: non pubblicare."; exit 1;
           }
+          git diff --exit-code
+          test -z "$(git ls-files --others --exclude-standard)" || { echo "::error::File non verificati creati durante i test"; exit 1; }
           git switch -c "$PR_BRANCH"
           if ! git diff --cached --quiet; then
             git -c user.name='github-actions[bot]' \
@@ -250,6 +236,9 @@ jobs:
           { printf '## Tester indipendente — PR #%s\n\n' "$PR_NUMBER";
             printf 'Commit di partenza: %s\n' "$EXPECTED_SHA";
             printf 'Commit dopo il test: %s\n\n' "$(git rev-parse HEAD)";
+            printf 'File di test modificati:\n';
+            git diff --name-status "$EXPECTED_SHA" HEAD;
+            printf '\n';
             cat "$RUNNER_TEMP/tester.md";
             printf '\nRun Tester: %s\n' "$GITHUB_RUN_ID";
             printf '\nRisultato dei test automatici (exit code): ';
