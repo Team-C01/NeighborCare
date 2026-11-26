@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import re
 import subprocess
 import sys
+import time
 
 PHASE = os.environ.get("AGENT_PHASE", "")
 REPO = os.environ.get("GITHUB_REPOSITORY", "")
@@ -386,6 +387,71 @@ def dispatch_ci(branch):
     except subprocess.CalledProcessError:
         return "CI non avviata automaticamente: usare Actions > CI > Run workflow sul branch, oppure ripetere il push manualmente."
 
+def test_ci_run(head, branch):
+    response = repo_api(f"actions/workflows/ci.yml/runs?head_sha={head}&per_page=20")
+    return select_ci_run([r for r in response.get("workflow_runs", [])
+                          if r.get("head_sha") == head and r.get("head_branch") == branch])
+
+def wait_for_test_ci(number, head, branch, timeout=27 * 60):
+    """Wait for the independent CI, never execute model-generated code here."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        pr = repo_api(f"pulls/{number}")
+        if pr["state"] != "open" or pr["head"]["sha"] != head:
+            return None, "PR chiusa o commit cambiato durante la verifica: rilanciare sul nuovo commit."
+        run = test_ci_run(head, branch)
+        if run and run["status"] == "completed":
+            return run, None
+        time.sleep(15)
+    return None, "Tempo di attesa CI scaduto: consultare Actions, nessun esito dichiarato."
+
+def testing_result(number, head, branch, new_commit):
+    """Delegate test execution once, then retrieve actual results for this SHA."""
+    try:
+        existing = None if new_commit else test_ci_run(head, branch)
+        if existing is None:
+            started = dispatch_ci(branch)
+            if not started.startswith("CI avviata"):
+                return False, started
+        run, problem = wait_for_test_ci(number, head, branch)
+        if problem:
+            return False, problem
+        jobs = repo_api(f"actions/runs/{run['id']}/jobs?per_page=100").get("jobs", [])
+        checks = next((j for j in jobs if j["name"] == "repository-checks"), None)
+        if not checks or checks.get("status") != "completed":
+            return False, f"Esito del job repository-checks non disponibile. [CI]({run['html_url']})"
+        passed = checks.get("conclusion") == "success"
+        lines = [f"**Esito esecuzione automatica: {'SUPERATA' if passed else 'NON SUPERATA'}.**",
+                 f"Commit verificato: `{head}`.",
+                 f"[CI effettiva]({run['html_url']}).",
+                 "Esecuzione gia disponibile sullo stesso commit, riutilizzata senza duplicare i test."
+                 if existing else "CI avviata dalla fase Tester; esito atteso prima di concludere."]
+        # Only use the current bot's structured CI comment, not arbitrary user text.
+        summary = next((c.get("body") or "" for c in reversed(pages(f"issues/{number}/comments"))
+                        if c.get("user", {}).get("login") == "github-actions[bot]"
+                        and (c.get("body") or "").startswith("<!-- neighborcare-ci-summary -->")
+                        and f"Commit: `{head}`" in c["body"]
+                        and f"/actions/runs/{run['id']})" in c["body"]), "")
+        for stack in ("Backend", "Frontend"):
+            match = re.search(rf"(?m)^- {stack}: ([0-9]+ superati, [0-9]+ falliti/errori, [0-9]+ saltati)$", summary)
+            lines.append(f"- {stack}: {match.group(1) if match else 'conteggi non disponibili; consultare il report CI'}")
+        errors = [step["name"] for step in checks.get("steps") or []
+                  if step.get("conclusion") in {"failure", "timed_out", "cancelled"}]
+        if errors:
+            lines.append("Controlli non superati: " + ", ".join(errors) + ".")
+        if passed:
+            lines.append("Nessun errore nei controlli automatici eseguiti. I test saltati e quelli manuali non valgono come superati.")
+        else:
+            lines.append("Non procedere alla review finale: distinguere errori di test, build o infrastruttura dai log. Usare AGENTE CORREGGI: per difetti applicativi; AGENTE TEST: per test errati o mancanti.")
+        return passed, "\n\n".join(lines)
+    except (subprocess.CalledProcessError, KeyError, ValueError, OSError) as exc:
+        return False, "Esito CI non recuperabile: " + type(exc).__name__ + ". Consultare Actions."
+
+def complete_testing(number, head, branch, body, new_commit):
+    passed, result = testing_result(number, head, branch, new_commit)
+    comment(number, body + "\n\n## Esito dei test eseguiti\n\n" + result)
+    require(passed, "Fase Tester: verifica automatica non superata o non disponibile; leggere il report nella PR.")
+
 def publish():
     state = json.loads((ARTIFACT / "state.json").read_text())
     ctx = context()
@@ -427,8 +493,12 @@ def publish():
         if PHASE == "correzione" and ctx["plan"]:
             apply_approved_plan(pr, ctx["plan"])
         number = pr["number"] if pr else issue["number"]
-        comment(number, f"## {ROLE[PHASE].capitalize()} AI\n\nFase avviata da: @{ACTOR}\nCommit esaminato: {ctx['head']}\n\n"
-                f"Nessuna modifica proposta.\n\n{report}\n\n[Run]({url}). Verificare la CI e i Test Frame.")
+        body = (f"## {ROLE[PHASE].capitalize()} AI\n\nFase avviata da: @{ACTOR}\nCommit esaminato: {ctx['head']}\n\n"
+                f"Nessuna modifica proposta.\n\n{report}\n\n[Run]({url}).")
+        if PHASE == "test":
+            complete_testing(number, ctx["head"], ctx["branch"], body, False)
+        else:
+            comment(number, body + " Verificare la CI e i Test Frame.")
         return
     git("apply", "--index", "--check", str(patch_path))
     git("apply", "--index", str(patch_path))
@@ -479,9 +549,12 @@ def publish():
     else:
         if PHASE == "correzione" and ctx["plan"]:
             apply_approved_plan(pr, ctx["plan"])
-        comment(pr["number"], f"## {ROLE[PHASE].capitalize()} AI\n\nFase avviata da: @{ACTOR}\nCommit di partenza: {ctx['head']}\n"
-                f"Commit pubblicato: {new_sha}\n\n{report}\n\n[Run]({url}). "
-                + dispatch_ci(ctx["branch"]))
+        body = (f"## {ROLE[PHASE].capitalize()} AI\n\nFase avviata da: @{ACTOR}\nCommit di partenza: {ctx['head']}\n"
+                f"Commit pubblicato: {new_sha}\n\n{report}\n\n[Run]({url}).")
+        if PHASE == "test":
+            complete_testing(pr["number"], new_sha, ctx["branch"], body, True)
+        else:
+            comment(pr["number"], body + " " + dispatch_ci(ctx["branch"]))
 
 if __name__ == "__main__":
     try:

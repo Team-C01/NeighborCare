@@ -181,12 +181,53 @@ class ScopeTests(unittest.TestCase):
             with patch.dict(a.os.environ, {"GITHUB_RUN_ID": "124"}), \
                  patch.object(a, "context", return_value=ctx), patch.object(a, "checkout"), \
                  patch.object(a, "git") as git, patch.object(a, "dispatch_ci") as dispatch, \
-                 patch.object(a, "comment") as comment:
+                 patch.object(a, "complete_testing") as complete:
                 a.publish()
             git.assert_not_called()
             dispatch.assert_not_called()
-            self.assertIn("Nessuna modifica proposta", comment.call_args.args[1])
-            self.assertIn("Fase avviata da: @tm", comment.call_args.args[1])
+            self.assertIn("Nessuna modifica proposta", complete.call_args.args[3])
+            self.assertIn("Fase avviata da: @tm", complete.call_args.args[3])
+            self.assertFalse(complete.call_args.args[4])
+
+    def test_tester_reuses_current_ci_without_duplicate(self):
+        run = {"id": 1, "html_url": "https://github.com/run", "status": "completed"}
+        job = {"name": "repository-checks", "status": "completed", "conclusion": "success", "steps": []}
+        with patch.object(a, "test_ci_run", return_value=run), \
+             patch.object(a, "wait_for_test_ci", return_value=(run, None)), \
+             patch.object(a, "dispatch_ci") as dispatch, \
+             patch.object(a, "repo_api", return_value={"jobs": [job]}), \
+             patch.object(a, "pages", return_value=[]):
+            passed, message = a.testing_result(59, "b"*40, "branch", False)
+        self.assertTrue(passed)
+        dispatch.assert_not_called()
+        self.assertIn("riutilizzata", message)
+        self.assertIn("SUPERATA", message)
+
+    def test_tester_executes_ci_once_and_reports_failure(self):
+        run = {"id": 1, "html_url": "https://github.com/run", "status": "completed"}
+        job = {"name": "repository-checks", "status": "completed", "conclusion": "failure",
+               "steps": [{"name": "Build e test", "conclusion": "failure"}]}
+        summary = {"user": {"login": "github-actions[bot]"}, "body":
+                   "<!-- neighborcare-ci-summary -->\nCommit: `" + "b"*40 +
+                   "`\n- Backend: 1 superati, 1 falliti/errori, 0 saltati\n[CI](https://github.com/r/actions/runs/1)"}
+        with patch.object(a, "dispatch_ci", return_value="CI avviata") as dispatch, \
+             patch.object(a, "wait_for_test_ci", return_value=(run, None)), \
+             patch.object(a, "repo_api", return_value={"jobs": [job]}), \
+             patch.object(a, "pages", return_value=[summary]), \
+             patch.object(a, "comment") as comment:
+            with self.assertRaises(ValueError):
+                a.complete_testing(59, "b"*40, "branch", "Test scritti", True)
+        dispatch.assert_called_once_with("branch")
+        body = comment.call_args.args[1]
+        self.assertIn("NON SUPERATA", body)
+        self.assertIn("1 falliti/errori", body)
+        self.assertIn("Build e test", body)
+
+    def test_tester_rejects_outdated_commit(self):
+        with patch.object(a, "repo_api", return_value={"state": "open", "head": {"sha": "c"*40}}):
+            result, problem = a.wait_for_test_ci(59, "b"*40, "branch")
+        self.assertIsNone(result)
+        self.assertIn("commit cambiato", problem)
 
     def test_ci_dispatch(self):
         with patch.object(a, "cmd", return_value="") as call:
