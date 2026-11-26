@@ -106,7 +106,7 @@ jobs:
         run: |
           set -euo pipefail
           gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
-            --json number,title,body,comments,closingIssuesReferences,headRefOid > "$RUNNER_TEMP/pr.json"
+            --json number,title,body,closingIssuesReferences,headRefOid > "$RUNNER_TEMP/pr.json"
           gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/diff-full.txt"
           gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --name-only > "$RUNNER_TEMP/files.txt"
           # Il lockfile generato puo dominare il diff senza aggiungere logica applicativa.
@@ -135,8 +135,8 @@ jobs:
               evidence.push({sha:commit.sha,author:commit.author?.login||null,message:commit.commit.message,files:(detail.files||[]).map(f=>({path:f.filename,status:f.status})),files_truncated:(detail.files||[]).length>=100});
             }
             const comments=await github.paginate(github.rest.issues.listComments,{...context.repo,issue_number:pr.number,per_page:100});
-            const selected=comments.filter(c=>c.user?.login==='github-actions[bot]' || (c.author_association!=='NONE' && c.author_association!=='CONTRIBUTOR')).slice(-35);
-            const records=selected.map(c=>({id:c.id,author:c.user?.login,association:c.author_association,date:c.created_at,url:c.html_url,body:(c.body||'').slice(0,10000)}));
+            const selected=comments.filter(c=>c.user?.login==='github-actions[bot]' || ['OWNER','MEMBER','COLLABORATOR'].includes(c.author_association)).slice(-12);
+            const records=selected.map(c=>({id:c.id,author:c.user?.login,association:c.author_association,date:c.created_at,url:c.html_url,body:(c.body||'').slice(0,2500)}));
             const runs=await github.paginate(github.rest.actions.listWorkflowRunsForRepo,{...context.repo,head_sha:pr.head.sha,per_page:100});
             const ciRuns=runs.filter(r=>r.name==='CI' && r.head_sha===pr.head.sha).slice(0,10);
             const checks=await github.paginate(github.rest.checks.listForRef,{...context.repo,ref:pr.head.sha,per_page:100});
@@ -192,6 +192,9 @@ jobs:
             cat "$RUNNER_TEMP/model-excerpts.txt"
             cat "$RUNNER_TEMP/pr.json" "$RUNNER_TEMP/issue.json" "$RUNNER_TEMP/files.txt" "$RUNNER_TEMP/diff.txt"
           } > "$RUNNER_TEMP/prompt.txt"
+          if [ "$(wc -c < "$RUNNER_TEMP/prompt.txt")" -gt 115000 ]; then
+            echo '::error::Contesto di review troppo grande: suddividere il task; nessuna evidenza troncata silenziosamente.'; exit 1
+          fi
           copilot -p "$(cat "$RUNNER_TEMP/prompt.txt")" -s --model=auto --no-ask-user --no-auto-update \
             --disable-builtin-mcps --available-tools='view,grep,glob' \
             --deny-tool=write --deny-tool=edit --deny-tool=shell > "$RUNNER_TEMP/revisione-raw.md"
