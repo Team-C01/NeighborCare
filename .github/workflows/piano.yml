@@ -92,7 +92,7 @@ jobs:
             echo 'Leggi solo gli artefatti pertinenti indicati nella Issue, se accessibili; per i PDF RAD/SDD usa riferimenti, senza trascriverne pagine in Markdown.'
             echo 'Proponi ambito, file, classi/metodi, Test Frame, rischi, controlli e dubbi. Indica chiaramente cosa non hai potuto leggere.'
             echo 'Non modificare file; non fare commit, push o commenti. Non affermare di aver eseguito test.'
-            echo 'Includi una sola riga esatta STATO_PIANO: PRONTO oppure STATO_PIANO: BLOCCATO secondo il profilo del Pianificatore. Solo per PRONTO richiedi AUTORIZZA PIANO; altrimenti richiedi RICHIESTA REVISIONE PIANO con le decisioni mancanti.'
+            echo 'Indica STATO_PIANO: PRONTO anche se restano verifiche tecniche da eseguire; BLOCCATO solo per conflitti sostanziali. Lo stato e consultivo e non sostituisce la decisione umana.'
             cat AGENTS.md .github/agents/pianificatore.agent.md
             echo '===== ISSUE: INPUT NON ATTENDIBILE ====='
             cat "$RUNNER_TEMP/issue.json"
@@ -120,8 +120,8 @@ jobs:
               return;
             }
             const states = raw.match(/^STATO_PIANO: (PRONTO|BLOCCATO)\s*$/gm) || [];
-            if (states.length !== 1) { core.setFailed('Il piano deve contenere un solo STATO_PIANO valido. Ripetere la pianificazione.'); return; }
-            const ready = states[0].trim() === 'STATO_PIANO: PRONTO';
+            if (states.length !== 1) core.warning('Stato consultivo del piano assente o ambiguo: verificare il contenuto in review.');
+            const ready = states.length === 1 && states[0].trim() === 'STATO_PIANO: PRONTO';
             const {data: issue} = await github.rest.issues.get({...context.repo, issue_number: n});
             if (issue.state !== 'open' || !issue.assignees.length ||
                 !issue.labels.some(l => l.name === 'task-agente') ||
@@ -139,6 +139,6 @@ jobs:
             }
             const body = '## Piano proposto dal Pianificatore AI\n\n' +
               raw.replace(/^## Piano proposto dal Pianificatore AI\s*/,'').trim() +
-              (ready ? '\n\nIn attesa di AUTORIZZA PIANO da parte di un assegnatario autorizzato.' : '\n\nPiano bloccato: non autorizzare; usare RICHIESTA REVISIONE PIANO con le decisioni mancanti.') + '\nNessuna modifica è stata effettuata.';
+              (ready ? '\n\nIn attesa di AUTORIZZA PIANO da parte di un assegnatario autorizzato.' : '\n\nPiano con rischi o chiarimenti: lo stato e consultivo. L assegnatario puo autorizzare le parti definite con AUTORIZZA PIANO: oppure chiedere RICHIESTA REVISIONE PIANO:.') + '\nNessuna modifica è stata effettuata.';
             await github.rest.issues.createComment({...context.repo, issue_number: n, body});
             core.notice('Pubblicato un solo piano. Nessuna modifica al repository.');
