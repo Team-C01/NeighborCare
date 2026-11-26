@@ -19,6 +19,14 @@ jobs:
   repository-checks:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    outputs:
+      backend: ${{ steps.report.outputs.backend }}
+      frontend: ${{ steps.report.outputs.frontend }}
+      database: ${{ steps.verify.outputs.database }}
+      backend_build: ${{ steps.verify.outputs.backend }}
+      frontend_build: ${{ steps.verify.outputs.frontend_build }}
+      frontend_tests: ${{ steps.verify.outputs.frontend_tests }}
+      audit: ${{ steps.verify.outputs.audit }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -78,4 +86,64 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Build, PostgreSQL, test e audit
+        id: verify
         run: bash .github/scripts/verify-project.sh
+      - name: Riepilogo test (anche in caso di errore)
+        id: report
+        if: always() && !cancelled()
+        run: |
+          if [[ -f .github/scripts/verify_reports.py ]]; then
+            python3 .github/scripts/verify_reports.py --summary || true
+          else
+            echo "Report non disponibile: checkout o preparazione falliti." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  report-pr:
+    needs: repository-checks
+    if: always() && !cancelled() && github.repository == 'Team-C01/NeighborCare' && (github.event_name != 'pull_request_review' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Aggiorna unico riepilogo CI sulla PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CHECK_RESULT: ${{ needs.repository-checks.result }}
+          BACKEND: ${{ needs.repository-checks.outputs.backend }}
+          FRONTEND: ${{ needs.repository-checks.outputs.frontend }}
+          DATABASE: ${{ needs.repository-checks.outputs.database }}
+          BACKEND_BUILD: ${{ needs.repository-checks.outputs.backend_build }}
+          FRONTEND_BUILD: ${{ needs.repository-checks.outputs.frontend_build }}
+          FRONTEND_TESTS: ${{ needs.repository-checks.outputs.frontend_tests }}
+          AUDIT: ${{ needs.repository-checks.outputs.audit }}
+        run: |
+          set -euo pipefail
+          # No checkout or execution of application code in this write-enabled job.
+          prs=$(gh api --method GET "repos/$REPO/pulls" -f state=open -f base=main -f "head=${REPO%%/*}:$BRANCH")
+          pr=$(jq -r --arg sha "$HEAD_SHA" --arg repo "$REPO" '.[] | select(.head.sha == $sha and .head.repo.full_name == $repo) | .number' <<< "$prs" | head -n 1)
+          [[ -n "$pr" ]] || exit 0
+          safe_counts() {
+            if [[ "$1" =~ ^[0-9]+\ superati,\ [0-9]+\ falliti/errori,\ [0-9]+\ saltati$ ]]; then
+              printf '%s' "$1"
+            else
+              printf 'Non disponibile'
+            fi
+          }
+          safe_status() {
+            case "$1" in success|failure|skipped|cancelled) printf '%s' "$1";; *) printf 'non eseguito';; esac
+          }
+          marker='<!-- neighborcare-ci-summary -->'
+          body=$(printf '%s\n## CI NeighborCare - %s\n\nCommit: `%s`\n\n- PostgreSQL: %s\n- Maven (build/test): %s\n- Backend: %s\n- Build frontend: %s\n- Vitest: %s\n- Frontend: %s\n- Audit npm: %s\n\n[Dettagli e report](https://github.com/%s/actions/runs/%s). I test manuali restano da documentare.\n' \
+            "$marker" "$(safe_status "$CHECK_RESULT")" "$HEAD_SHA" "$(safe_status "$DATABASE")" "$(safe_status "$BACKEND_BUILD")" "$(safe_counts "$BACKEND")" "$(safe_status "$FRONTEND_BUILD")" "$(safe_status "$FRONTEND_TESTS")" "$(safe_counts "$FRONTEND")" "$(safe_status "$AUDIT")" "$REPO" "$GITHUB_RUN_ID")
+          comment=$(gh api --paginate "repos/$REPO/issues/$pr/comments?per_page=100" --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- neighborcare-ci-summary -->"))) | .id' | tail -n 1)
+          [[ "$(gh api "repos/$REPO/pulls/$pr" --jq .head.sha)" == "$HEAD_SHA" ]] || exit 0
+          if [[ -n "$comment" ]]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$comment" -f "body=$body" > /dev/null
+          else
+            gh api --method POST "repos/$REPO/issues/$pr/comments" -f "body=$body" > /dev/null
+          fi

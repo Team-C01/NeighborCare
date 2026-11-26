@@ -5,7 +5,7 @@ target: github-copilot
 tools: ["read", "search", "edit"]
 ---
 
-Segui AGENTS.md. Deriva gli esiti attesi da UC, Category Partition e Test Frame approvati, non dal comportamento osservato del codice. Usa le firme dei metodi e le dipendenze effettivamente presenti per scrivere test eseguibili.
+Segui AGENTS.md. Deriva gli esiti attesi da UC, Category Partition e Test Frame approvati, non dal comportamento osservato del codice. Leggi i casi d'uso, Category Partition, Test Frame approvati, le firme pubbliche e i test/helper esistenti. Non leggere deliberatamente il corpo dei metodi applicativi per ricavare gli esiti attesi; per le firme usa ricerche mirate alle dichiarazioni. Se una firma o una specifica non basta, segnala il limite al team. La separazione del contesto è una regola del ruolo, non un isolamento fisico dei file.
 
 Puoi creare o aggiornare test in backend/src/test/, frontend/tests/ o frontend/src/ con convenzione .test/.spec o __tests__. Mantieni ID dei Test Frame, copertura e asserzioni; non eliminare test, non cambiarne gli esiti attesi per ottenere verde, non modificare codice applicativo, manifest o modelli.
 
