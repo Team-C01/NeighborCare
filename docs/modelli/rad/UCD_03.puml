@@ -1,0 +1,46 @@
+@startuml UCD_03_GestioneBeneficiario
+
+left to right direction
+skinparam monochrome true
+skinparam linetype polyline
+skinparam shadowing false
+skinparam packageStyle folder
+
+actor Beneficiario
+
+package "Gestione Beneficiario" {
+    usecase "RegistrazioneBeneficiario" as UC1
+    usecase "CreaRichiestaForm" as UC2
+    usecase "AnnullaRichiestaBeneficiario" as UC3
+    usecase "VisualizzaStatoRichiesta" as UC4
+    usecase "SegnalaAnomaliaBeneficiario" as UC4_ext
+    usecase "ApriChatBeneficiario" as UC5
+    usecase "RilascioRecensione" as UC6
+    usecase "VisualizzaCronologia" as UC7
+    usecase "VisualizzaNotificheBeneficiario" as UC8
+    usecase "VisualizzaArea\nPersonaleBeneficiario" as UC9
+    usecase "ModificaDati\nPersonaliBeneficiario" as UC10
+    usecase "ConfermaRichiestaCompletata" as UC11
+    usecase "VisualizzaRecensioniRilasciate" as UC12
+    usecase "CreaRichiestaIA" as UC13
+    usecase "InviaMessaggioBeneficiario" as UC14
+}
+
+Beneficiario -- UC1 
+Beneficiario -- UC2
+Beneficiario -- UC3
+Beneficiario -- UC4
+Beneficiario -- UC5
+Beneficiario -- UC6
+Beneficiario -- UC7
+Beneficiario -- UC8
+Beneficiario -- UC9
+Beneficiario -- UC10
+Beneficiario -- UC11
+Beneficiario -- UC12
+Beneficiario -- UC13
+Beneficiario -- UC14
+
+UC4 <.. UC4_ext : <<extend>>
+
+@enduml

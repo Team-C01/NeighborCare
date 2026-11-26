@@ -1,0 +1,77 @@
+@startuml SD_DisattivaNeighbor
+
+skinparam monochrome true
+skinparam shadowing false
+hide footbox
+
+actor Coordinatore
+boundary ElencoNeighborVerificati_Boundary
+control DisattivaNeighbor_Control
+entity UtenteRegistrato
+entity Neighbor
+
+activate Coordinatore
+activate ElencoNeighborVerificati_Boundary
+
+Coordinatore -> ElencoNeighborVerificati_Boundary : cercaNeighbor(nome)
+ElencoNeighborVerificati_Boundary -> DisattivaNeighbor_Control : richiediNeighbor(nome)
+activate DisattivaNeighbor_Control
+
+DisattivaNeighbor_Control -> UtenteRegistrato : cercaNeighbor(nome)
+activate UtenteRegistrato
+UtenteRegistrato --> DisattivaNeighbor_Control : idNeighbor
+deactivate UtenteRegistrato
+
+DisattivaNeighbor_Control --> ElencoNeighborVerificati_Boundary : idNeighbor
+
+Coordinatore -> ElencoNeighborVerificati_Boundary : cliccaDisattivaAccount(idNeighbor)
+ElencoNeighborVerificati_Boundary -> DisattivaNeighbor_Control : richiediDisattivazione(idNeighbor)
+
+DisattivaNeighbor_Control -> Neighbor : verificaStato(idNeighbor)
+activate Neighbor
+Neighbor --> DisattivaNeighbor_Control : stato
+deactivate Neighbor
+
+alt se stato==Disattivato
+    DisattivaNeighbor_Control --> ElencoNeighborVerificati_Boundary : mostraAvvisoGiàDisattivato()
+    Coordinatore -> ElencoNeighborVerificati_Boundary : tornaIndietro()
+
+else se stato==Verificato
+    create boundary FormDisattivazioneNeighbor_Boundary
+    DisattivaNeighbor_Control --> FormDisattivazioneNeighbor_Boundary : <<create>>
+    activate FormDisattivazioneNeighbor_Boundary
+
+    Coordinatore -> FormDisattivazioneNeighbor_Boundary : compilaMotivazione(causale, note)
+    Coordinatore -> FormDisattivazioneNeighbor_Boundary : cliccaConfermaDisattivazione()
+    FormDisattivazioneNeighbor_Boundary -> DisattivaNeighbor_Control : confermaDisattivazione(idNeighbor, causale, note)
+
+    DisattivaNeighbor_Control -> Neighbor : disattivaAccount(idNeighbor, causale, note)
+    activate Neighbor
+
+    alt errore modifica stato
+        Neighbor --> DisattivaNeighbor_Control : erroreModificaStato
+        deactivate Neighbor
+        DisattivaNeighbor_Control --> ElencoNeighborVerificati_Boundary : mostraErroreModificaStato()
+
+    else modifica stato riuscita
+        activate Neighbor
+        Neighbor --> DisattivaNeighbor_Control : confermaDisattivazione
+        DisattivaNeighbor_Control -> Neighbor : revocaPermessiAccesso(idNeighbor)
+        Neighbor --> DisattivaNeighbor_Control : permessiRevocati
+        deactivate Neighbor
+
+        create entity Notifica
+        DisattivaNeighbor_Control --> Notifica : <<create>>(idNeighbor, causale, note)
+
+        DisattivaNeighbor_Control --> FormDisattivazioneNeighbor_Boundary : mostraConferma()
+        destroy FormDisattivazioneNeighbor_Boundary
+
+        DisattivaNeighbor_Control -> ElencoNeighborVerificati_Boundary : aggiornaElencoNeighbor()
+    end
+end
+
+deactivate DisattivaNeighbor_Control
+deactivate ElencoNeighborVerificati_Boundary
+deactivate Coordinatore
+
+@enduml

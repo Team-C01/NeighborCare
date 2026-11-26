@@ -1,0 +1,33 @@
+@startwbs NP_Beneficiario
+
+skinparam monochrome true
+skinparam shadowing false
+
+* Home Beneficiario
+** Il mio profilo
+*** Modifica Dati Personali
+*** Logout
+** Notifiche
+** Le mie richieste
+*** Dettaglio Richiesta
+**** Annulla Richiesta
+**** Segnala Anomalia
+**** Apri Chat
+**** Conferma Consegna
+***** Modulo Recensione
+****** Pubblica Recensione
+** Crea Nuova Richiesta
+*** "Compila Modulo Manualmente" as cmp
+** Crea nuova Richiesta a Voce
+*** Interfaccia Registrazione\nVocale
+**** "Modulo Precompilato IA\n" as PreAI
+***** "Invia Richiesta" as Invia
+** Storico
+*** Visualizza Recensioni Rilasciate
+*** Dettaglio Richiesta conclusa
+
+PreAI --> cmp
+cmp --> Invia
+
+
+@endwbs

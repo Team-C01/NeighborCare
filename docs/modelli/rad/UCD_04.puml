@@ -1,0 +1,39 @@
+@startuml UCD_04_GestioneCoordinatore
+
+left to right direction
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle folder
+skinparam linetype polyline
+
+actor Coordinatore
+
+package "Gestione Coordinatore" {
+    usecase "VisualizzaNeighborsVerificati" as UC1
+    usecase "VerificaNeighbor" as UC2
+    usecase "VisualizzaRichieste" as UC3
+    usecase "VisualizzaDettagliAnomalia" as UC4
+    usecase "AnnullaRichiestaCoordinatore" as UC5
+    usecase "EsoneraNeighbor" as UC6
+    usecase "ConsultaStatisticheServizio" as UC7
+    usecase "ConsultaStatisticheNeighbor" as UC8
+    usecase "DisattivaNeighbor" as UC9
+    usecase "VisualizzaNeighborsInAttesa" as UC10
+    usecase "VisualizzaNotificheCoordinatore" as UC11
+    usecase "VisualizzaElencoAnomalie" as UC12
+}
+
+Coordinatore -- UC1
+Coordinatore -- UC2
+Coordinatore -- UC3
+Coordinatore -- UC4
+Coordinatore -- UC5
+Coordinatore -- UC6
+Coordinatore -- UC7
+Coordinatore -- UC8
+Coordinatore -- UC9
+Coordinatore -- UC10
+Coordinatore -- UC11
+Coordinatore -- UC12
+
+@enduml

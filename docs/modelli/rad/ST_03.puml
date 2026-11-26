@@ -1,0 +1,23 @@
+@startuml SC_StatoNeighbor
+
+left to right direction
+skinparam ranksep 190
+
+state "In attesa di verifica" as InAttesa
+state "Verificato" as Verificato
+state "Disattivato" as Disattivato
+state "Rifiutato" as Rifiutato
+
+[*] -down-> InAttesa : creaProfilo()
+
+InAttesa --> Verificato : approvaNeighbor()\n[datiValidi]\n/notificaAttivazione()
+InAttesa --> Rifiutato : rigettaNeighbor()\n[MotivazioneValida]\n/notificaRifiuto()
+
+Rifiutato --> InAttesa : aggiornaDatiRegistrazione()\n[nuoviDati]\n/segnalaAggiornamento()
+
+Verificato --> Disattivato : disattivaAccount()\n[motivazioneValida &&\nNessunaConsegna]\n/segnalaDisattivazione()
+
+Disattivato --> [*]
+Rifiutato --> [*]
+
+@enduml

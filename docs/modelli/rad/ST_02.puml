@@ -1,0 +1,21 @@
+@startuml ST_StatoAnomalia
+
+left to right direction
+skinparam monochrome true
+skinparam shadowing false
+skinparam nodesep 60
+skinparam ranksep 60
+hide empty description
+
+state "In attesa di gestione" as InAttesa
+state "Risolta" as Risolta
+
+[*] --> InAttesa : inviaSegnalazione()
+
+InAttesa -down-> InAttesa : rigettaSegnalazione()\n[motivazioneInserita]\n/richiediNuovaSoluzione()
+
+InAttesa --> Risolta : risolviAnomalia()\n[scelta= esonero ||\nscelta= annullamento]\naggiornaStatoRichiesta()
+
+Risolta --> [*]
+
+@enduml

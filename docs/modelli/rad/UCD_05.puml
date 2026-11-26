@@ -1,0 +1,46 @@
+@startuml UCD_05_GestioneNeighbor
+
+left to right direction
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle folder
+skinparam linetype polyline
+
+actor Neighbor
+
+package "Gestione Neighbor" {
+    usecase "RegistrazioneNeighbor" as UC1
+    usecase "VisualizzaAreaPersonaleNeighbor" as UC2
+    usecase "PermettiLocalizzazione" as UC3
+    usecase "AccettaRichiesta" as UC3_inc
+    usecase "SegnalaAnomaliaNeighbor" as UC3_ext
+    usecase "InserisciTragitto" as UC4
+    usecase "ApriChatNeighbor" as UC5
+    usecase "VisualizzaCronologiaRichieste" as UC6
+    usecase "VisualizzaNuoveRichieste" as UC7
+    usecase "ModificaDatiPersonaliNeighbor" as UC8
+    usecase "SegnalaRitiro" as UC9
+    usecase "SegnalaConsegna" as UC10
+    usecase "InviaMessaggioNeighbor" as UC11
+    usecase "VisualizzaDettagliRichiesta" as UC12
+    usecase "VisualizzaNotificheNeighbor" as UC13
+}
+
+Neighbor -- UC1
+Neighbor -- UC2
+Neighbor -- UC3
+Neighbor -- UC4
+Neighbor -- UC5
+Neighbor -- UC6
+Neighbor -- UC7
+Neighbor -- UC8
+Neighbor -- UC9
+Neighbor -- UC10
+Neighbor -- UC11
+Neighbor -- UC12
+Neighbor -- UC13
+
+UC3 ..> UC3_inc : <<include>>
+UC3_inc <.. UC3_ext : <<extend>>
+
+@enduml
