@@ -98,6 +98,34 @@ class ScopeTests(unittest.TestCase):
         self.assertIn("Task-assignees: kappq, demr64", message)
         self.assertNotIn("Co-authored-by:", message)
 
+    def test_confirmed_coauthors_are_assigned_self_declared_and_unused(self):
+        users = [{"login": "tm", "id": 123, "type": "User"},
+                 {"login": "other", "id": 456, "type": "User"}]
+        comments = [
+            {"id": 1, "user": users[0], "body": "COAUTORE: test - Definiti i casi limite",
+             "created_at": "2026-11-26T10:00:00Z"},
+            {"id": 2, "user": users[1], "body": "COAUTORE: implementazione - Scritto il componente",
+             "created_at": "2026-11-26T10:00:00Z"},
+            {"id": 3, "user": {"login": "outsider", "id": 789}, "body": "COAUTORE: test - Definiti i casi limite",
+             "created_at": "2026-11-26T10:00:00Z"},
+        ]
+        selected = a.confirmed_coauthors(users, comments, "test", set(), "2026-11-26T11:00:00Z")
+        self.assertEqual(selected, [(users[0], 1)])
+        self.assertEqual(a.confirmed_coauthors(users, comments, "test", {"1"}, "2026-11-26T11:00:00Z"), [])
+        self.assertEqual(a.confirmed_coauthors(users, comments, "test", set(), "2026-11-26T09:00:00Z"), [])
+        message = a.commit_message("test", "issue #55", "tm", ["tm", "other"], "url", selected)
+        self.assertIn("Coauthor-claim: 1", message)
+        self.assertTrue(message.endswith("Co-authored-by: tm <123+tm@users.noreply.github.com>"))
+
+    def test_apply_new_approved_plan(self):
+        pr = {"number": 60, "body": "Closes #59\n<!-- neighborcare-approved-plan: 1 -->\nPiano approvato: https://github.com/old\n"}
+        with patch.object(a, "repo_api") as api:
+            a.apply_approved_plan(pr, {"id": 2, "html_url": "https://github.com/new"})
+            body = api.call_args.args[2]["body"]
+            self.assertIn("Closes #59", body)
+            self.assertIn("neighborcare-approved-plan: 2", body)
+            self.assertNotIn("neighborcare-approved-plan: 1", body)
+
     def test_pr_plan_preserves_approved_version(self):
         comments = [
             {"id": 1, "user": {"login": "github-actions[bot]"}, "body": a.PLAN_HEADER + " v1",

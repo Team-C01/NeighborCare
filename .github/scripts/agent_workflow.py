@@ -153,6 +153,19 @@ def context():
     if PHASE == "implementazione":
         require("fase:implementazione" in labels(issue), "Applicare fase:implementazione per autorizzare il piano")
     plan = latest_plan(issue) if PHASE == "implementazione" else None
+    if PHASE == "correzione" and issue:
+        request = EVENT.get("comment", {}).get("body") or ""
+        approved = re.search(r"(?im)^PIANO APPROVATO:\s*(\d+)\s*$", request)
+        if approved:
+            plan = latest_plan(issue)
+            require(str(plan["id"]) == approved.group(1), "Indicare l'ID dell'ultimo piano valido della Issue")
+            require(plan.get("created_at", "") <= EVENT.get("comment", {}).get("created_at", ""),
+                    "Il piano non era disponibile al momento dell'approvazione")
+        else:
+            previous = approved_pr_plan(issue, pr, pages(f"issues/{issue['number']}/comments"))
+            marker = re.search(r"<!-- neighborcare-plan: ([0-9a-f]{64}) -->", previous or "")
+            require(not marker or marker.group(1) == fingerprint(issue),
+                    "Requisiti cambiati: AGENTE PIANO: sulla Issue, poi AGENTE CORREGGI: con PIANO APPROVATO: ID sulla PR")
     if plan and EVENT.get("issue", {}).get("updated_at") and plan.get("created_at"):
         require(plan["created_at"] <= EVENT["issue"]["updated_at"],
                 "Il piano non era ancora disponibile: riapplicare fase:implementazione dopo averlo letto")
@@ -168,7 +181,9 @@ def state_for(ctx):
     return {"phase": PHASE, "issue": issue["number"] if issue else None,
             "fingerprint": fingerprint(issue) if issue else None,
             "pr": pr["number"] if pr else None, "head": ctx["head"], "base": ctx["base"],
-            "branch": ctx["branch"], "plan": plan["id"] if plan else None}
+            "branch": ctx["branch"], "plan": plan["id"] if plan else None,
+            "pr_plan": re.search(r"<!-- neighborcare-approved-plan: (\d+) -->", (pr or {}).get("body") or "").group(1)
+            if re.search(r"<!-- neighborcare-approved-plan: (\d+) -->", (pr or {}).get("body") or "") else None}
 
 def checkout(sha):
     git("fetch", "--no-tags", "origin", sha)
@@ -199,12 +214,42 @@ def approved_pr_plan(issue, pr, comments):
     plans = [c for c in plans if c.get("created_at", "") <= pr.get("created_at", "")]
     return plans[-1]["body"] if plans else None
 
-def commit_message(phase, subject, actor, assignees, url):
-    # Human request attribution is not human authorship. Keep the bot as author.
-    return (f"agent({phase}): {subject} ({actor})\n\n"
-            f"Requested-by: {actor}\n"
-            f"Task-assignees: {', '.join(assignees) or 'none'}\n"
-            f"Agent-run: {url}")
+def confirmed_coauthors(assignees, comments, phase, used_claims, before):
+    """Use only self-declared, phase-specific contributions by assigned humans."""
+    users = {a["login"].lower(): a for a in assignees if a.get("type") == "User"
+             and isinstance(a.get("id"), int) and a["id"] > 0
+             and re.fullmatch(r"[A-Za-z0-9-]+", a["login"])}
+    selected = {}
+    for c in comments:
+        login = c.get("user", {}).get("login", "").lower()
+        match = re.match(r"(?i)^COAUTORE:\s*(implementazione|test|correzione)\s*-\s*(\S[^\r\n]*)", c.get("body") or "")
+        if (login in users and c.get("user", {}).get("id") == users[login]["id"]
+                and match and match.group(1).lower() == phase and len(match.group(2).strip()) >= 10
+                and str(c["id"]) not in used_claims and c.get("created_at", "") <= before):
+            selected[login] = (users[login], c["id"])
+    return list(selected.values())
+
+def commit_message(phase, subject, actor, assignees, url, coauthors=()):
+    # Keep the bot as author; native coauthor trailers identify confirmed human contributions.
+    message = (f"agent({phase}): {subject} ({actor})\n\n"
+               f"Requested-by: {actor}\n"
+               f"Task-assignees: {', '.join(assignees) or 'none'}\n"
+               f"Agent-run: {url}")
+    for user, claim in coauthors:
+        message += f"\nCoauthor-claim: {claim}"
+    for user, claim in coauthors:
+        login = user["login"]
+        message += f"\nCo-authored-by: {login} <{user['id']}+{login}@users.noreply.github.com>"
+    return message
+
+def apply_approved_plan(pr, plan):
+    if not plan:
+        return
+    body = pr.get("body") or ""
+    body = re.sub(r"(?m)^<!-- neighborcare-approved-plan: \d+ -->\s*\n?", "", body)
+    body = re.sub(r"(?m)^Piano approvato: https://github\.com/[^\n]+\n?", "", body)
+    body = body.rstrip() + f"\n\n<!-- neighborcare-approved-plan: {plan['id']} -->\nPiano approvato: {plan['html_url']}\n"
+    repo_api(f"pulls/{pr['number']}", "PATCH", {"body": body})
 
 def ci_evidence(pr):
     try:
@@ -280,7 +325,10 @@ def prepare():
                                           for c in comments[-6:]]
     if pr:
         if issue:
-            evidence["approved_plan"] = approved_pr_plan(issue, pr, comments)
+            evidence["approved_plan"] = plan["body"] if plan else approved_pr_plan(issue, pr, comments)
+            marker = re.search(r"<!-- neighborcare-plan: ([0-9a-f]{64}) -->", evidence["approved_plan"] or "")
+            if marker and marker.group(1) != fingerprint(issue):
+                evidence["plan_notice"] = "I requisiti attuali differiscono dal piano approvato. Richiedere nuova pianificazione e approvazione esplicita; non considerare coerente il task senza verifica."
         evidence["pr"] = {"number": pr["number"], "head": ctx["head"], "body": pr.get("body")}
         evidence["pr_comments"] = [{"by": c["user"]["login"], "body": bounded(c.get("body") or "", 2500)}
                                    for c in pages(f"issues/{pr['number']}/comments")[-10:]]
@@ -340,9 +388,8 @@ def publish():
     # of a patch. Re-run generation instead when the patch's reference changed.
     require(all(state[k] == current[k] for k in ("phase", "issue", "pr", "head", "branch", "base")),
             "Branch o commit cambiati durante la fase: rilanciare")
-    if PHASE in {"piano", "implementazione"}:
-        require(state["fingerprint"] == current["fingerprint"] and state["plan"] == current["plan"],
-                "Issue o piano cambiati durante la fase: rilanciare")
+    require(all(state[k] == current[k] for k in ("fingerprint", "plan", "pr_plan")),
+            "Issue o piano cambiati durante la fase: rilanciare")
     report = (ARTIFACT / "report.md").read_text().strip()
     require(report and len(report) <= 24000 and not TOKEN.search(report), "Report non valido")
     patch_path = ARTIFACT / "changes.patch"
@@ -368,6 +415,8 @@ def publish():
             return
     checkout(ctx["head"])
     if not patch:
+        if PHASE == "correzione" and ctx["plan"]:
+            apply_approved_plan(pr, ctx["plan"])
         number = pr["number"] if pr else issue["number"]
         comment(number, f"## {ROLE[PHASE].capitalize()} AI\n\nFase avviata da: @{ACTOR}\nCommit esaminato: {ctx['head']}\n\n"
                 f"Nessuna modifica proposta.\n\n{report}\n\n[Run]({url}). Verificare la CI e i Test Frame.")
@@ -380,8 +429,13 @@ def publish():
     git("config", "user.name", "github-actions[bot]")
     git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
     subject = f"issue #{issue['number']}" if issue else f"PR #{pr['number']}"
-    assignee_logins = [a["login"] for a in (issue or pr or {}).get("assignees", [])]
-    git("commit", "-m", commit_message(PHASE, subject, ACTOR, assignee_logins, url))
+    assigned = (issue or pr or {}).get("assignees", [])
+    assignee_logins = [a["login"] for a in assigned]
+    number = pr["number"] if pr else issue["number"]
+    before = EVENT.get("comment", {}).get("created_at") or (EVENT.get("pull_request") or EVENT.get("issue") or {}).get("updated_at", "")
+    used_claims = set(re.findall(r"(?m)^Coauthor-claim: (\d+)$", git("log", "--format=%B", "HEAD")))
+    coauthors = confirmed_coauthors(assigned, pages(f"issues/{number}/comments"), PHASE, used_claims, before)
+    git("commit", "-m", commit_message(PHASE, subject, ACTOR, assignee_logins, url, coauthors))
     new_sha = git("rev-parse", "HEAD").strip()
     # Non-force push. Check that a new branch really does not exist.
     if not pr:
@@ -414,6 +468,8 @@ def publish():
                 ci_status += " Assegnazione automatica non riuscita: assegnare manualmente i responsabili."
         comment(created["number"], ci_status)
     else:
+        if PHASE == "correzione" and ctx["plan"]:
+            apply_approved_plan(pr, ctx["plan"])
         comment(pr["number"], f"## {ROLE[PHASE].capitalize()} AI\n\nFase avviata da: @{ACTOR}\nCommit di partenza: {ctx['head']}\n"
                 f"Commit pubblicato: {new_sha}\n\n{report}\n\n[Run]({url}). "
                 + dispatch_ci(ctx["branch"]))
