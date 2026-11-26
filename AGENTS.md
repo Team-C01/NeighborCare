@@ -43,6 +43,14 @@ Usare ID, classi, attributi, tipi e metodi dei modelli reali. Il Class Diagram p
 - Una persona Write **non assegnata** effettua una review GitHub APPROVED sul commit corrente. Puo essere PM o TM: non e consentita una autoapprovazione neppure quando l'autore della PR e un bot.
 - Dopo tre tentativi di correzione consecutivi senza test positivi, interrompere gli agenti e richiedere un riesame umano. Per requisiti, dipendenze o aree protette fuori piano serve un nuovo task.
 
+### Shell controllata
+
+- Pianificatore e Revisore restano in sola lettura e senza shell.
+- Implementatore e Correttore possono usare esclusivamente i comandi npm/Maven autorizzati nel rispettivo workflow per generare il lockfile, installare le dipendenze approvate, compilare ed eseguire i test esistenti, correggendo il codice entro il piano.
+- Il Tester puo installare dipendenze da lockfile ed eseguire build e test tramite i soli comandi autorizzati; non puo modificare codice applicativo, manifest, lockfile o test esistenti.
+- I comandi sono invocati senza le variabili token GitHub/Copilot indicate nei workflow. Non accedere a credenziali, concatenare comandi, usare una shell libera, cancellare file versionati, eseguire operazioni Git/GitHub o modificare aree protette. I filtri dei tool e i controlli sul diff non costituiscono una sandbox completa: i comandi di build/test possono eseguire codice del progetto.
+- I controlli deterministici di GitHub Actions e della CI restano obbligatori e indipendenti; i risultati riferiti dal modello non li sostituiscono. Durante il primo bootstrap i controlli finali usano le versioni dichiarate nei manifest appena creati.
+
 ### Chiedi prima
 
 Modifiche a requisiti, architettura, interfacce condivise, Test Frame, nuove dipendenze o ambito non pianificato. La modifica richiede decisione del team e una nuova pianificazione.
