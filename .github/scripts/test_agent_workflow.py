@@ -17,7 +17,7 @@ class ScopeTests(unittest.TestCase):
         self.assertFalse(a.permitted_path("test", "frontend/src/App.jsx", "M"))
         self.assertFalse(a.permitted_path("test", "frontend/tests/App.test.jsx", "D"))
 
-    def test_governance_and_credentials_are_protected(self):
+    def test_workflow_and_credentials_are_protected(self):
         for path in (".github/workflows/ci.yml", "AGENTS.md", "backend/pom.xml",
                      "frontend/package-lock.json", "docs/rad/C01_RAD.pdf",
                      "frontend/public/.env", "frontend/src/../../AGENTS.md",
