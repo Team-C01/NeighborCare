@@ -87,7 +87,7 @@ def permitted_path(phase, path, status):
         return bool(test_path(path)) and status in {"A", "M"}
     if phase not in {"implementazione", "correzione"} or test_path(path):
         return False
-    if path == "README.md":
+    if path in {"README.md", "docs/README.md"}:
         return status == "M"
     if path.startswith(("backend/src/main/", "frontend/src/", "frontend/public/")):
         return status in {"A", "M", "D"}
@@ -265,6 +265,21 @@ def package():
     (ARTIFACT / "changes.patch").write_text(patch)
     (ARTIFACT / "report.md").write_text(report)
 
+def verify():
+    """Apply the artifact in a disposable, read-only-token job before build/test."""
+    state = json.loads((ARTIFACT / "state.json").read_text())
+    require(state["phase"] == PHASE and SHA.fullmatch(state["head"]), "Artefatto non valido")
+    checkout(state["head"])
+    path = ARTIFACT / "changes.patch"
+    patch = path.read_text()
+    require(len(patch.encode()) <= MAX_PATCH and not TOKEN.search(patch), "Patch non valida")
+    if patch:
+        git("apply", "--index", "--check", str(path))
+        git("apply", "--index", str(path))
+        check_scope(PHASE)
+        git("diff", "--cached", "--check")
+    print("Checkout di verifica pronto; nessun push e nessun token Copilot")
+
 def comment(number, body):
     repo_api(f"issues/{number}/comments", "POST", {"body": body})
 
@@ -281,6 +296,9 @@ def publish():
     patch = patch_path.read_text()
     require(len(patch.encode()) <= MAX_PATCH and not TOKEN.search(patch), "Patch non valida")
     url = f"https://github.com/{REPO}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+    verification = os.environ.get("VERIFY_OUTCOME", "indisponibile")
+    if verification not in {"success", "failure", "cancelled", "skipped", "indisponibile"}:
+        verification = "indisponibile"
     issue, pr = ctx["issue"], ctx["pr"]
     if PHASE == "piano":
         require(not patch, "Pianificatore non puo modificare file")
@@ -302,7 +320,7 @@ def publish():
     if not patch:
         number = pr["number"] if pr else issue["number"]
         comment(number, f"## {ROLE[PHASE].capitalize()} AI\n\nCommit esaminato: {ctx['head']}\n\n"
-                f"Nessuna modifica proposta.\n\n{report}\n\n[Run]({url}). Verificare la CI e i Test Frame.")
+                f"Nessuna modifica proposta.\n\n{report}\n\nPreverifica reale: {verification}. [Run]({url}). Verificare la CI e i Test Frame.")
         return
     git("apply", "--index", "--check", str(patch_path))
     git("apply", "--index", str(patch_path))
@@ -325,7 +343,7 @@ def publish():
     if PHASE == "implementazione":
         assignees = ", ".join("@" + a["login"] for a in issue["assignees"])
         body = (f"Closes #{issue['number']}\nAutorizzante: @{ACTOR}\nResponsabili assegnati: {assignees}\n\n"
-                f"## Implementazione\n{report}\n\n## Verifiche\nCI e test indipendenti da eseguire sul commit {new_sha}.\n"
+                f"## Implementazione\n{report}\n\n## Verifiche\nPreverifica reale: {verification}. CI e test indipendenti da eseguire sul commit {new_sha}.\n"
                 f"[Run]({url}). Applicare fase:test alla Draft PR.")
         try:
             created = repo_api("pulls", "POST", {"title": issue["title"], "head": ctx["branch"],
@@ -336,12 +354,13 @@ def publish():
             raise
     else:
         comment(pr["number"], f"## {ROLE[PHASE].capitalize()} AI\n\nCommit di partenza: {ctx['head']}\n"
-                f"Commit pubblicato: {new_sha}\n\n{report}\n\n[Run]({url}). "
+                f"Commit pubblicato: {new_sha}\n\n{report}\n\nPreverifica reale: {verification}. [Run]({url}). "
                 "La verifica dei test spetta alla CI sul nuovo commit; non e un PASS dichiarato dal modello.")
 
 if __name__ == "__main__":
     try:
-        {"prepare": prepare, "package": package, "publish": publish}[sys.argv[1]]()
+        {"prepare": prepare, "package": package, "verify": verify, "publish": publish}[sys.argv[1]]()
     except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as exc:
-        print(f"Workflow NeighborCare: {exc}", file=sys.stderr)
+        detail = getattr(exc, "stderr", "") or ""
+        print(f"Workflow NeighborCare: {exc} {TOKEN.sub('[REDACTED]', detail[-2000:])}", file=sys.stderr)
         sys.exit(1)
