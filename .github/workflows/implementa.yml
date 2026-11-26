@@ -200,74 +200,7 @@ jobs:
             printf '%s\n' '- Frontend: `npm ci` e `npm run build` eseguiti con successo.' >> "$RUNNER_TEMP/build-checks.md"
             # Solo il primo bootstrap senza test puo rinviare i test al Tester indipendente.
             if ! git cat-file -e HEAD:frontend/package.json 2>/dev/null &&
-               ! git ls-files frontend/tests frontend/src | grep -E '\.(test|spec)\.[A-Za-z0-9]+
-          else
-            echo "::notice::Frontend non inizializzato: npm N/A."
-            printf '%s\n' '- Frontend: npm N/A (nessun `frontend/package.json`).' >> "$RUNNER_TEMP/build-checks.md"
-          fi
-      - name: Verifica diff e pubblica solo una Draft PR
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          set -euo pipefail
-          git add --all
-          git diff --cached --check
-          git diff --cached --exit-code -- .github AGENTS.md .gitignore \
-            docs/rad/C01_RAD.pdf docs/sdd/C01_SDD.pdf
-          test -z "$(git diff --cached --name-only --diff-filter=D)" || {
-            echo "::error::Non e consentito eliminare file"; exit 1;
-          }
-          if git diff --cached --summary | grep -E '(mode 120000|rename|delete)'; then
-            echo "::error::Symlink, rinomina o cancellazione non autorizzata"; exit 1
-          fi
-          if git diff --cached --quiet; then
-            echo '::error::Nessuna modifica: controllare eventuali blocchi nel report.'
-            cat "$RUNNER_TEMP/report.md"
-            exit 1
-          fi
-          while IFS= read -r -d '' file; do
-            case "$file" in
-              backend/*|frontend/*|README.md|docs/*) ;;
-              *) echo "::error::File fuori dalle aree consentite: $file"; exit 1 ;;
-            esac
-            case "$file" in
-              docs/rad/*|docs/sdd/*|docs/test/*|docs/modelli/*|docs/agentic-workflow-iterazioni.md|*/src/test/*|*/tests/*|*.test.*|*.spec.*|*.pdf|*.lock.yml|*/.env|*/.env.*|*/node_modules/*|*/target/*|*/dist/*|*/build/*)
-                echo "::error::File protetto, test o generato non modificabile: $file"; exit 1 ;;
-            esac
-          done < <(git diff --cached --name-only -z)
-          git -c user.name='github-actions[bot]' \
-            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit -m "Issue #${ISSUE_NUMBER}: implement approved plan"
-          gh auth setup-git
-          git push origin "HEAD:refs/heads/agent/issue-${ISSUE_NUMBER}-implementazione"
-          ASSIGNED_TMS="$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER" --jq '[.assignees[].login | ascii_downcase] | sort | map("@" + .) | join(", ")')"
-          APPROVER="${{ steps.guard.outputs.approver_login }}"
-          test -n "$ASSIGNED_TMS" && test -n "$APPROVER"
-          {
-            printf 'Closes #%s\nAutorizzante: @%s\nResponsabili assegnati: %s\n\n' "$ISSUE_NUMBER" "$APPROVER" "$ASSIGNED_TMS"
-            printf '## Issue collegata e piano autorizzato\n\n'
-            printf -- '- Issue: #%s\n- Piano autorizzato da: @%s\n- Referenti assegnati: %s\n\n' "$ISSUE_NUMBER" "$APPROVER" "$ASSIGNED_TMS"
-            printf '## Modifiche effettuate\n\n'
-            while IFS= read -r changed; do
-              printf -- '- `%s`\n' "$changed"
-            done < <(git diff-tree --no-commit-id --name-only -r HEAD)
-            printf '\n## Modelli e requisiti consultati\n\n'
-            printf 'Riferimenti dichiarati dall agente nel report sottostante; verificare in review le fonti effettivamente accessibili, incluse eventuali limitazioni dei PDF RAD/SDD.\n\n'
-            printf '## Test e verifiche eseguiti\n\n'
-            cat "$RUNNER_TEMP/build-checks.md"
-            printf '\n- Test indipendenti sui Test Frame: da produrre ed eseguire successivamente dal Tester AI.\n\n'
-            printf '## Eventuali deviazioni, rischi e limiti\n\n'
-            printf 'Consultare il resoconto dell Implementatore riportato qui sotto; nessuna deviazione e approvata implicitamente.\n\n'
-            printf '## Resoconto dell Implementatore\n\n'
-            cat "$RUNNER_TEMP/report.md"
-            printf '\n\n## Checklist di review umana\n\n'
-            printf '%s\n' '- [ ] Issue, piano e approvazione verificati' '- [ ] Modifiche coerenti con ambito e modelli' '- [ ] Test Frame coperti dal Tester indipendente con esito reale' '- [ ] Scostamenti e nuove dipendenze autorizzati o dichiarati N/A' '- [ ] Review indipendente sul commit corrente'
-          } > "$RUNNER_TEMP/pr.md"
-          gh pr create --repo "$GITHUB_REPOSITORY" --base main \
-            --head "agent/issue-${ISSUE_NUMBER}-implementazione" --draft \
-            --title "[AGENTE] Issue #${ISSUE_NUMBER}" --body-file "$RUNNER_TEMP/pr.md"
- >/dev/null; then
+               ! git ls-files frontend/tests frontend/src | grep -E '\.(test|spec)\.[A-Za-z0-9]+$' >/dev/null; then
               node -e 'const s=require("./frontend/package.json").scripts?.["test:ci"]; if(typeof s!=="string" || !s.trim() || /passWithNoTests/i.test(s)) process.exit(1)' || {
                 echo '::error::Serve uno script test:ci reale che non accetti zero test.'; exit 1;
               }
