@@ -139,10 +139,6 @@ def context():
     if pr:
         require(pr["state"] == "open" and pr["head"]["repo"]["full_name"] == REPO and
                 pr["base"]["ref"] == "main" and pr["head"]["ref"] != "main", "PR non interna verso main")
-        if PHASE in {"test", "correzione"}:
-            require(pr["draft"], "Per modificare la PR con un agente, usare Convert to draft")
-        if PHASE == "revisione":
-            require(not pr["draft"], "Selezionare Ready for review prima della revisione")
         if pr_event:
             require(pr["head"]["sha"] == pr_event["head"]["sha"], "PR cambiata: richiedere la fase sul nuovo commit")
         issue_number = linked_issue(pr.get("body"))
@@ -171,7 +167,7 @@ def context():
         timestamp = EVENT.get("issue", {}).get("updated_at")
         if timestamp:
             require(plan["created_at"] <= timestamp, "Piano pubblicato dopo l'evento: riapplicare la label")
-    base = pr["base"]["sha"] if pr else repo_api("branches/main")["commit"]["sha"]
+    base = pr["base"]["sha"] if pr else os.environ["GITHUB_SHA"]
     head = pr["head"]["sha"] if pr else base
     branch = pr["head"]["ref"] if pr else f"agent/issue-{issue_number}-implementazione"
     require(SHA.fullmatch(base) and SHA.fullmatch(head), "Commit non valido")
@@ -320,7 +316,7 @@ def publish():
                 "Branch esistente: aprire o recuperare la PR da quel branch")
     else:
         fresh = repo_api(f"pulls/{pr['number']}")
-        require(fresh["head"]["sha"] == ctx["head"] and fresh["draft"], "PR cambiata: rilanciare la fase")
+        require(fresh["state"] == "open" and fresh["head"]["sha"] == ctx["head"], "PR cambiata: rilanciare la fase")
     git("-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential",
         "push", "origin", f"HEAD:refs/heads/{ctx['branch']}")
     if PHASE == "implementazione":
