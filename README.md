@@ -51,8 +51,7 @@ In caso di problemi usare `@agente piano` sulla Issue, `@agente correggi`, `@age
 - [.github/scripts/agent_workflow.py](.github/scripts/agent_workflow.py): preparazione, validazione e pubblicazione delle modifiche.
 - [.github/scripts/verify-project.sh](.github/scripts/verify-project.sh): comandi di verifica condivisi tra runner e CI.
 - [.github/workflows/ci.yml](.github/workflows/ci.yml): controlli automatici, Maven, PostgreSQL, npm, test e audit; nessuna chiamata AI.
-- [.github/workflows/governance.yml](.github/workflows/governance.yml): verifica dell'approvazione umana indipendente, senza vincolare l'esito al giudizio AI.
 - Secret richiesto: `COPILOT_GITHUB_TOKEN`. Nessun token Claude, nessun servizio aggiuntivo.
-- Protezioni main: review indipendente, CODEOWNERS, repository-checks e governance-gate. Mai push diretto o merge automatico.
+- Protezioni main: review indipendente, CODEOWNERS, repository-checks. Mai push diretto o merge automatico.
 
 Lo sviluppo manuale è supportato con branch, PR, test e review. Il report AI aiuta il team, ma non sostituisce le verifiche o la responsabilità dei revisori.
