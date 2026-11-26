@@ -1,75 +1,36 @@
-# NeighborCare - Guida operativa e iterazioni agentiche
+# NeighborCare - Guida operativa
 
-## 1. Apertura e pianificazione
+## Flusso normale
 
-**PM e TM con permesso Write possono svolgere gli stessi passaggi operativi.** Uno di loro crea una Issue con il template `Task per agente`, assegna uno o piu collaboratori con Write (anche se stesso) e applica manualmente `fase:piano`. L'assegnazione da sola non avvia il Pianificatore.
+1. Un PM o TM con Write crea una Issue usando il template Task per agente, assegna i responsabili e applica `fase:piano`.
+2. Il Pianificatore pubblica il piano. Un collaboratore Write lo verifica; se va bene applica `fase:implementazione` (questa label è l'autorizzazione). Non serve un commento aggiuntivo.
+3. L'Implementatore pubblica il codice su un branch del task e apre una Draft PR. Il runner verifica l'ambito prima della pubblicazione; la CI verifica il codice.
+4. Applicare `fase:test` alla PR. Il Tester indipendente aggiunge o aggiorna i test. Se non servono modifiche ai test, lo dichiara senza produrre commit fittizi.
+5. Verificare CI e Test Frame. Se GitHub richiede l'autorizzazione del run del bot, usare il pulsante della CI; Ready for review avvia anche una nuova CI.
+6. Selezionare Ready for review. Il Revisore AI pubblica rilievi e suggerimenti consultivi, con commit, contesto e stato CI.
+7. Una persona con Write non coinvolta nel task verifica i risultati, risolve eventuali rilievi reali e approva la PR. Sono richiesti CI verde, review indipendente, CODEOWNERS e governance-gate. Il merge è manuale.
 
-Il Pianificatore pubblica il piano senza cambiare il codice. Uno degli assegnatari puo chiedere una modifica sulla Issue con:
+## Se qualcosa non va
 
-```text
-RICHIESTA REVISIONE PIANO:
-Manca il caso in cui gli intervalli temporali sono consecutivi.
-Prevedere la verifica del Test Frame TF_SIM_08.
-```
+Usare un commento nella conversazione della Issue o della PR:
 
-`ripianifica.yml` produce una nuova versione. Quando e corretta, uno qualsiasi degli assegnatari scrive sulla Issue:
+| Dove | Commento | Effetto |
+| --- | --- | --- |
+| Issue | `@agente piano` + spiegazione | Nuovo piano |
+| PR | `@agente correggi` + problema da risolvere | Correzione sul branch della stessa PR |
+| PR | `@agente test` | Nuova sessione Tester |
+| PR | `@agente revisione` | Nuova revisione consultiva |
 
-```text
-AUTORIZZA PIANO: autorizzo l'ultima versione del piano.
-```
+I prefissi precedenti `RICHIESTA REVISIONE PIANO:` e `RICHIESTA CORREZIONE:` restano accettati. Anche rimuovere e riapplicare la label della fase avvia un nuovo run. Non occorre convertire la PR in Draft e poi Ready per ogni correzione: una nuova modifica rende comunque obsolete le approvazioni precedenti. Non avviare più agenti sulla stessa PR contemporaneamente; i run sono serializzati.
 
-Non e richiesta la lista dei file autorizzati; l'Implementatore resta vincolato al piano, ai requisiti e alle aree consentite della repository.
+Per modifiche al requisito, aggiornare la Issue, richiedere un nuovo piano e approvarlo con la label. Se esiste già una PR, continuare sullo stesso branch con @agente correggi, dopo aver condiviso il nuovo piano. Se esiste un branch senza PR perché la creazione automatica è stata negata, aprire manualmente una Draft PR verso main con Closes #N.
 
-## 2. Implementazione e test
+Un errore di autenticazione Copilot, di GitHub o di disponibilità delle dipendenze non dimostra un difetto nel codice. Consultare il run in Actions e rilanciare la fase solo dopo aver risolto l'errore. Non usare bypass amministrativi per eludere test o review.
 
-Un assegnatario rimuove `fase:piano` e aggiunge `fase:implementazione` alla Issue. L'Implementatore crea un branch e una Draft PR con `Closes #N`, `Autorizzante: @login` e `Responsabili assegnati: @a, @b`, registrando l'elenco iniziale come storico. Gli assegnatari correnti sono quelli della Issue.
+## Sviluppo manuale
 
-Un assegnatario applica `fase:test` alla Draft PR. Il Tester indipendente crea o aggiorna i test dai Test Frame pertinenti e pubblica gli esiti reali. Puo correggere test errati, fragili, incompleti o superati da specifiche approvate, motivandoli; non modifica codice applicativo e non indebolisce le asserzioni. Se la PR riguarda solo documentazione, segnala N/A per test applicativi con motivazione.
+È sempre possibile lavorare senza agenti: branch per task, PR collegata alla Issue, CI verde, verifica dei Test Frame e review umana indipendente. Gli agenti restano strumenti di supporto. I cambi a dipendenze, configurazione, modelli e governance sono umani e tracciati.
 
-## 3. Iterazione della correzione
+## Requisiti tecnici
 
-In caso di test falliti, CI non superata, implementazione incompleta o review negativa, mantenere o riportare la PR allo stato Draft. Un assegnatario o revisore autorizzato con Write puo scrivere:
-
-```text
-RICHIESTA CORREZIONE:
-TF_SIM_08 fallisce: intervalli consecutivi non devono sovrapporsi.
-Atteso: false. Ottenuto: true.
-Correggere o reimplementare il metodo senza modificare i test.
-```
-
-`correzione.yml` interviene sullo **stesso branch** e sulla **stessa PR**. Puo reimplementare una classe se necessario, ma non cambiare test, RAD/SDD, workflow, segreti o requisiti non pianificati. Dopo il nuovo commit un assegnatario rimuove e riaggiunge `fase:test` sulla PR, eseguendo il retest.
-
-Dopo tre ripianificazioni o correzioni AI consecutive senza test riusciti compare un avviso. Il team puo richiedere ulteriori tentativi manualmente, senza indebolire le verifiche.
-
-### Recupero e cambiamenti durante il task
-
-Se la PR aveva gia ricevuto approvazioni umane, revocare le approvazioni superate prima di ripianificare o riassegnare sullo stesso SHA. Il gate si aggiorna alla review umana: non riutilizzare un check verde precedente alla nuova autorizzazione, neppure se il codice non cambia.
-
-- Build fallita: se i file rispettano i vincoli, l'Implementatore apre comunque la Draft PR e segnala l'errore; correggere sulla stessa PR.
-- Branch automatico pubblicato senza PR: riapplicare `fase:implementazione` per recuperarlo. Se la PR esiste gia, continuare su quella. Se chiusa senza merge, ripristinare il branch se eliminato e riapplicare la label per riaprire la PR; nessuna cancellazione automatica.
-- Riassegnazione: portare la PR a Draft, attendere le run attive, aggiornare gli assegnatari della Issue e far scrivere `AUTORIZZA PIANO:` a un assegnatario attuale. Conservare i metadati iniziali della PR. Ripetere Tester, Revisore e review umana; un assegnatario attuale o precedente non puo fare la review indipendente.
-- Nuovo piano sulla stessa PR: portarla a Draft, attendere le run attive, rimuovere `fase:implementazione` e applicare `fase:piano` alla Issue. Scrivere `RICHIESTA REVISIONE PIANO:` sulla Issue, attendere il nuovo piano e autorizzarlo. Ripristinare `fase:implementazione` e richiedere `RICHIESTA CORREZIONE:` nella Draft PR per allineare il codice. Ripetere tutte le verifiche e ottenere una nuova review; non usare risultati precedenti alla nuova autorizzazione. Se l'obiettivo cambia completamente, aprire un nuovo task.
-- Il Tester e la CI verificano i report reali: almeno un test eseguito per ogni stack inizializzato. Per il frontend `test:ci` deve produrre `frontend/test-results/junit.xml`. Il backend usa i report Surefire/Failsafe. Non vale un test saltato o un report fittizio.
-
-## 4. Revisione iterativa e indipendente
-
-Dopo Tester riuscito, uno degli assegnatari seleziona Ready for review. Il Revisore AI pubblica `ESITO_REVISIONE: PASS` oppure `CHANGES_REQUESTED`.
-
-Se la review AI o umana trova un difetto, riportare la PR a Draft, commentare con `RICHIESTA CORREZIONE:`, ripetere il Tester e poi Ready for review. Ogni nuovo commit richiede una verifica nuova.
-
-Un collaboratore con Write **non incluso tra gli assegnatari** (PM oppure TM) esegue Review changes > Approve dopo aver letto il diff. La review indipendente e richiesta anche quando il task e assegnato a un PM. Non e obbligatorio che il revisore sia un PM.
-
-## 5. Governance e merge
-
-`governance-gate` **non parte all'apertura della PR, all'aggiornamento dei commit o con Ready for review**: prima della review umana, il required check rimane `Expected` e quindi il merge resta bloccato. Il gate parte quando una persona invia una review GitHub `Approve` o `Request changes`, oppure quando una review viene revocata. Per evitare un FAIL prematuro, la review umana `Approve` va inviata **solo dopo** Tester riuscito e Revisore AI con `ESITO_REVISIONE: PASS` sul commit corrente. Il gate confronta Issue e PR, verifica Tester e Revisore sul commit corrente e una review APPROVED da un collaboratore Write non assegnato. Un `Request changes` o una revoca mantiene il blocco; se il codice cambia, sono necessari nuovo Tester, Revisore e una nuova review. Il Ruleset principale richiede inoltre `repository-checks`, una approvazione e Code Owner review.
-
-Il merge e **sempre manuale**: PM e TM con le autorizzazioni necessarie possono integrarlo solo dopo i controlli verdi. Per le simulazioni si arriva al punto precedente al merge, poi si chiude la PR ed elimina il branch di test.
-
-## 6. Recupero
-
-- Piano non partito: verificare Write, Issue `task-agente`, assegnatari e label `fase:piano`.
-- Piano errato: `RICHIESTA REVISIONE PIANO:` nella Issue; poi nuova `AUTORIZZA PIANO:`.
-- Implementazione errata: `RICHIESTA CORREZIONE:` nella Draft PR e retest.
-- Test errato: verificare i Test Frame; il Tester puo correggere il test e motivare la modifica. Per rimuovere o rinominare test obsoleti, il TM interviene manualmente sul branch e motiva il diff. Se cambia la specifica, serve una decisione approvata. Riapplicare `fase:test` anche sullo stesso commit, poi ripetere review; non forzare verde.
-- Revisore AI o persona rifiuta: Convert to draft, correzione, retest e nuova review.
-- Nuovo commit: ripetere le verifiche e non riutilizzare la review sul vecchio SHA.
+Usare il secret COPILOT_GITHUB_TOKEN già configurato; non aggiungere token Claude o servizi a pagamento. La CI esegue Maven, PostgreSQL e npm; nessun token Copilot è passato al codice applicativo. I workflow agentici utilizzano una versione approvata della configurazione da main, per non richiedere un aggiornamento dei branch solo per eseguire un agente. La CI usa il codice della PR.
