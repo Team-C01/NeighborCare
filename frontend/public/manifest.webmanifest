@@ -1,0 +1,16 @@
+{
+  "name": "NeighborCare",
+  "short_name": "NeighborCare",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f7f4",
+  "theme_color": "#f5f7f4",
+  "icons": [
+    {
+      "src": "/neighborcare.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
