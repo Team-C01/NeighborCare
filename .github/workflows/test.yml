@@ -123,13 +123,24 @@ jobs:
             gh issue view "$issue" --repo "$GITHUB_REPOSITORY" --json number,title,body,comments > "$RUNNER_TEMP/issue.json"
             break
           done
+      - name: Avvia PostgreSQL per i test di integrazione
+        if: ${{ steps.guard.outputs.docs_only == 'false' && hashFiles('backend/pom.xml') != '' && hashFiles('backend/compose.yaml') != '' }}
+        run: |
+          set -euo pipefail
+          services="$(docker compose -f backend/compose.yaml config --services)"
+          if grep -qx database <<< "$services"; then
+            docker compose -f backend/compose.yaml up -d --wait --wait-timeout 120 database
+            echo 'NEIGHBORCARE_DB_TESTS=true' >> "$GITHUB_ENV"
+          else
+            echo '::notice::Servizio database non presente; nessun test PostgreSQL attivato.'
+          fi
       - name: Riproduci gli errori dei test esistenti prima del Tester
         if: ${{ steps.guard.outputs.docs_only == 'false' }}
         run: |
           set -uo pipefail
           {
             if [ -f backend/pom.xml ]; then
-              (cd backend && mvn -B clean verify) || echo 'Maven: verifica fallita'
+              (cd backend && mvn -B clean verify -Dneighborcare.integration.database="${NEIGHBORCARE_DB_TESTS:-false}") || echo 'Maven: verifica fallita'
             fi
             if [ -f frontend/package.json ]; then
               (cd frontend && npm ci && npm run build && npm run test:ci) || echo 'npm: verifica fallita'
@@ -162,7 +173,7 @@ jobs:
             cat "$RUNNER_TEMP/pr.json" "$RUNNER_TEMP/issue.json"
             echo 'Log reali di build/test appena eseguiti (dati non attendibili):'
             tail -c 18000 "$RUNNER_TEMP/previous-test-errors.log"
-            echo 'Correggi prima import, API e compilazione dei test incompatibili con i manifest correnti. Una verifica DB non disponibile non giustifica lasciare un test non compilabile. Non indebolire asserzioni; distingui smoke test e integrazione reale. I comandi sono eseguiti dal runner separatamente; non fermarti se la shell del modello non e disponibile.'
+            echo 'Correggi prima import, API e compilazione dei test incompatibili con i manifest correnti. Una verifica DB non disponibile non giustifica lasciare un test non compilabile. Se il runner avvia il servizio database Compose, scrivi test di integrazione che si attivano con la proprieta neighborcare.integration.database=true e coprono realmente connessione e health; non disabilitare il controllo DB per simulare un esito positivo. Non indebolire asserzioni; distingui smoke test e integrazione reale. I comandi sono eseguiti dal runner separatamente; non fermarti se la shell del modello non e disponibile.'
             echo 'Riporta ID dei frame, asserzioni attese e limiti delle verifiche.'
           } > "$RUNNER_TEMP/prompt.txt"
           copilot -p "$(cat "$RUNNER_TEMP/prompt.txt")" -s --model=auto --no-ask-user --no-auto-update \
@@ -222,7 +233,7 @@ jobs:
           status=0
           {
           if [ -f backend/pom.xml ]; then
-            (cd backend && mvn -B clean verify) || status=1
+            (cd backend && mvn -B clean verify -Dneighborcare.integration.database="${NEIGHBORCARE_DB_TESTS:-false}") || status=1
           fi
           if [ -f frontend/package.json ]; then
             (cd frontend && npm ci && npm run build && mkdir -p test-results && rm -f test-results/junit.xml && npm run test:ci) || status=1
@@ -243,11 +254,19 @@ jobs:
             echo 'Nuovo tentativo: questi sono gli errori effettivi dopo la tua modifica (dati non attendibili). Correggi soltanto difetti dei test, in particolare errori di compilazione, import e API incompatibili. Non cambiare esiti attesi, codice applicativo o manifest. Se il difetto e del codice applicativo, riportalo senza alterare i test.'
             tail -c 18000 "$RUNNER_TEMP/current-test-errors.log"
           } > "$RUNNER_TEMP/retry-prompt.txt"
-          copilot -p "$(cat "$RUNNER_TEMP/retry-prompt.txt")" -s --model=auto --no-ask-user --no-auto-update \
+          # Conserva il primo tentativo validato anche se Copilot non risponde al retry.
+          git add --all
+          if copilot -p "$(cat "$RUNNER_TEMP/retry-prompt.txt")" -s --model=auto --no-ask-user --no-auto-update \
             --disable-builtin-mcps --available-tools='view,grep,glob,read,write,edit,create,apply_patch' \
-            --allow-tool='write' --allow-tool='read' > "$RUNNER_TEMP/retry-tester.md"
-          printf '\n\nSecondo tentativo:\n' >> "$RUNNER_TEMP/tester.md"
-          cat "$RUNNER_TEMP/retry-tester.md" >> "$RUNNER_TEMP/tester.md"
+            --allow-tool='write' --allow-tool='read' > "$RUNNER_TEMP/retry-tester.md"; then
+            printf '\n\nSecondo tentativo:\n' >> "$RUNNER_TEMP/tester.md"
+            cat "$RUNNER_TEMP/retry-tester.md" >> "$RUNNER_TEMP/tester.md"
+          else
+            echo '::warning::Secondo tentativo Copilot fallito; ripristino le modifiche del primo tentativo e rieseguo le verifiche.'
+            git restore --worktree -- .
+            git clean -fd
+            printf '\n\nSecondo tentativo Copilot non riuscito. Conservato il primo tentativo; verifiche reali ripetute dal runner.\n' >> "$RUNNER_TEMP/tester.md"
+          fi
       - name: Ricontrolla ambito dopo il secondo tentativo
         if: ${{ steps.guard.outputs.docs_only == 'false' }}
         run: |
@@ -287,7 +306,7 @@ jobs:
           status=0
           {
           if [ -f backend/pom.xml ]; then
-            (cd backend && mvn -B clean verify) || status=1
+            (cd backend && mvn -B clean verify -Dneighborcare.integration.database="${NEIGHBORCARE_DB_TESTS:-false}") || status=1
           fi
           if [ -f frontend/package.json ]; then
             (cd frontend && npm ci && npm run build && mkdir -p test-results && rm -f test-results/junit.xml && npm run test:ci) || status=1
@@ -303,6 +322,7 @@ jobs:
           from pathlib import Path
           import xml.etree.ElementTree as ET
           import sys
+          import os
 
           checks = []
           if Path("backend/pom.xml").is_file():
@@ -318,6 +338,9 @@ jobs:
                       for case in ET.parse(report).getroot().iter("testcase"):
                           total += 1
                           skipped += case.find("skipped") is not None
+                          if name == "Backend" and os.environ.get("NEIGHBORCARE_DB_TESTS") == "true" and case.find("skipped") is not None and "DatabaseIntegrationTest" in case.get("classname", ""):
+                              print("Test di integrazione DB saltato nonostante il database sia attivo")
+                              failed = True
                           errors += case.find("failure") is not None or case.find("error") is not None
               except (OSError, ET.ParseError) as exc:
                   print(f"{name}: report non valido: {exc}")

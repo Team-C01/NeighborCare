@@ -121,7 +121,7 @@ frontend/
     integration/
 ```
 
-La struttura e una convenzione di implementazione, non un elenco di file da generare subito. Creare solo package/cartelle/classi necessari al task autorizzato; non creare moduli vuoti o funzionalita fuori piano. Un sottosistema senza interfaccia utente dedicata non richiede pagine React. Rispettare la direzione delle dipendenze del diagramma SDD (sez. 3.2.1, p. 11), i servizi della sez. 3.2.2 (pp. 12–13), il diagramma Three-Tier (sez. 3.2.3, p. 14), il deployment (sez. 3.3.1, p. 15) e l'Entity Class Diagram (sez. 4.2, p. 17). Non dedurre nuovi contratti dalla struttura delle cartelle.
+La struttura e una convenzione di implementazione, non un elenco di file da generare subito. Creare solo package/cartelle/classi necessari al task autorizzato; non creare moduli vuoti o funzionalita fuori piano. Un sottosistema senza interfaccia utente dedicata non richiede pagine React. Rispettare la direzione delle dipendenze del diagramma SDD (sez. 3.2.1, p. 11), i servizi della sez. 3.2.2 (pp. 12–13), il diagramma Three-Tier (sez. 3.2.3, p. 14), il deployment (sez. 3.3.1 del PDF SDD originale) e l'Entity Class Diagram (sez. 4.2, p. 17). Non dedurre nuovi contratti dalla struttura delle cartelle.
 
 ### Applicazione delle convenzioni da parte degli agenti e del team
 
@@ -171,7 +171,9 @@ Inventare specifiche, alterare PDF o esempi didattici XX/YY, indebolire test, in
 
 - `governance-gate` si avvia soltanto dopo una review umana `Approve` o `Request changes`, oppure la revoca di una review, **non** su apertura/aggiornamento Draft PR o Ready for review. Fino a quel momento il required check rimane `Expected` e blocca il merge. La review umana `Approve` va fatta solo dopo Tester riuscito e Revisore AI con `ESITO_REVISIONE: PASS` sul commit corrente. Il gate verifica Issue, assegnatari tracciati, Tester, Revisore e approvazione indipendente Write sullo SHA attuale, senza distinzione PM/TM.
 - Il Ruleset `Protect main - NeighborCare` richiede `repository-checks`, `governance-gate`, review APPROVED e Code Owner review. La bypass list Admin non va utilizzata durante i test.
-- Dopo un nuovo commit ripetere test, Revisore e review; i risultati vecchi non autorizzano il merge.
+- Dopo un nuovo commit ripetere test, Revisore e review; i risultati vecchi non autorizzano il merge. Il Revisore riceve cronologia dei file per commit, report Tester associato alla run verificata, CI/check dello SHA e commenti del team. Non attribuire la paternita dei test dal solo diff aggregato; distinguere verifiche automatiche da collaudo manuale e report storici. Gli estratti PDF aiutano a identificare riferimenti, ma non sostituiscono diagrammi e review umana.
+- Quando `backend/compose.yaml` contiene il servizio `database`, CI, Tester e Correttore avviano PostgreSQL e passano `-Dneighborcare.integration.database=true` a Maven. Il test d'integrazione non deve essere saltato con il database attivo. I test condizionali legittimi rimangono distinti dalle verifiche non svolte. La CI verifica anche l'audit npm per vulnerabilita alte/critiche. Docker Compose completo e persistenza devono essere collaudati e documentati quando richiesti dal task.
+- Se il secondo tentativo Copilot fallisce, ripristinare le modifiche del primo tentativo, rieseguire i controlli di ambito e le verifiche reali, pubblicare solo se consentito e non dichiarare PASS in presenza di errori. Nessuna deroga ai gate.
 
 - Le PR manuali che aggiornano solo gli artefatti testuali `docs/rad/uc/`, `docs/modelli/`, `docs/test/` e `docs/README.md` richiedono CI e review indipendente, non test applicativi o report agentici. Se collegate con `Closes #N`, la Issue deve essere aperta; l'autore deve essere uno degli assegnatari se presenti e il revisore non deve essere assegnato. I PDF restano protetti.
 

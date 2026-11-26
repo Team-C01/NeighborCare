@@ -16,7 +16,7 @@ I file con `XX`/`YY` e `modelli/sdd/class.puml` contengono **esempi inventati**,
 | Class Diagram ristrutturato | [modelli/sdd/class.puml](modelli/sdd/class.puml) | Sorgente esemplificativo; consultare il PDF SDD per il modello di progetto |
 | Dipendenze dei sottosistemi | [modelli/sdd/Sottosistemi_XX_YY.puml](modelli/sdd/Sottosistemi_XX_YY.puml) | SDD §3.2.1, p. 11 |
 | Architettura a livelli | [modelli/sdd/Livelli_XX_YY.puml](modelli/sdd/Livelli_XX_YY.puml) | SDD §3.2.2, p. 12 |
-| Deployment Diagram | [modelli/sdd/Deployment_XX_YY.puml](modelli/sdd/Deployment_XX_YY.puml) | SDD §3.3.1, p. 13 |
+| Deployment Diagram | [modelli/sdd/Deployment_XX_YY.puml](modelli/sdd/Deployment_XX_YY.puml) | SDD §3.3.1 (consultare il PDF originale) |
 | Category Partition | [test/CP_UC_XX.md](test/CP_UC_XX.md) | Artefatti di testing del team |
 | Test Frame | [test/TF_UC_XX.md](test/TF_UC_XX.md) | Artefatti di testing del team |
 

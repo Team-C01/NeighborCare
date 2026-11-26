@@ -146,13 +146,24 @@ jobs:
             --json number,title,body,comments > "$RUNNER_TEMP/issue.json"
           gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,comments > "$RUNNER_TEMP/pr.json"
+      - name: Avvia PostgreSQL per i test di integrazione
+        if: ${{ steps.guard.outputs.skip == 'false' && hashFiles('backend/pom.xml') != '' && hashFiles('backend/compose.yaml') != '' }}
+        run: |
+          set -euo pipefail
+          services="$(docker compose -f backend/compose.yaml config --services)"
+          if grep -qx database <<< "$services"; then
+            docker compose -f backend/compose.yaml up -d --wait --wait-timeout 120 database
+            echo 'NEIGHBORCARE_DB_TESTS=true' >> "$GITHUB_ENV"
+          else
+            echo '::notice::Servizio database non presente; nessun test PostgreSQL attivato.'
+          fi
       - name: Raccogli errori effettivi e audit prima della correzione
         if: ${{ steps.guard.outputs.skip == 'false' }}
         run: |
           set -uo pipefail
           {
             if [ -f backend/pom.xml ]; then
-              (cd backend && mvn -B verify) || echo 'Maven: verifica fallita'
+              (cd backend && mvn -B verify -Dneighborcare.integration.database="${NEIGHBORCARE_DB_TESTS:-false}") || echo 'Maven: verifica fallita'
             fi
             if [ -f frontend/package.json ]; then
               (cd frontend && npm ci && npm run build && npm run test:ci) || echo 'npm: verifica fallita'
@@ -258,7 +269,7 @@ jobs:
           audit_status=0
           {
             if [ -f backend/pom.xml ]; then
-              ([ "$JAVA_SETUP" = success ] && cd backend && mvn -B verify) || status=1
+              ([ "$JAVA_SETUP" = success ] && cd backend && mvn -B verify -Dneighborcare.integration.database="${NEIGHBORCARE_DB_TESTS:-false}") || status=1
             fi
             if [ -f frontend/package.json ]; then
               if [ "$NODE_SETUP" = success ]; then
@@ -292,11 +303,19 @@ jobs:
             echo 'Secondo tentativo: usa gli esiti effettivi dopo la modifica. Risolvi difetti applicativi e vulnerabilita nelle dipendenze compatibili; non modificare i test, non cambiare le versioni fissate, non usare --force. Se rimane solo un difetto del test, delegalo al Tester. Il runner aggiorna il lockfile.'
             tail -c 24000 "$RUNNER_TEMP/current-correction-errors.log"
           } > "$RUNNER_TEMP/retry-prompt.txt"
-          copilot -p "$(cat "$RUNNER_TEMP/retry-prompt.txt")" -s --model=auto --no-ask-user --no-auto-update \
+          # Conserva il primo tentativo validato anche se Copilot non risponde al retry.
+          git add --all
+          if copilot -p "$(cat "$RUNNER_TEMP/retry-prompt.txt")" -s --model=auto --no-ask-user --no-auto-update \
             --disable-builtin-mcps --available-tools='view,grep,glob,read,write,edit,create,apply_patch' \
-            --allow-tool='write' --allow-tool='read' > "$RUNNER_TEMP/retry-correction.md"
-          printf '\n\nSecondo tentativo:\n' >> "$RUNNER_TEMP/report.md"
-          cat "$RUNNER_TEMP/retry-correction.md" >> "$RUNNER_TEMP/report.md"
+            --allow-tool='write' --allow-tool='read' > "$RUNNER_TEMP/retry-correction.md"; then
+            printf '\n\nSecondo tentativo:\n' >> "$RUNNER_TEMP/report.md"
+            cat "$RUNNER_TEMP/retry-correction.md" >> "$RUNNER_TEMP/report.md"
+          else
+            echo '::warning::Secondo tentativo Copilot fallito; ripristino le modifiche del primo tentativo e rieseguo le verifiche.'
+            git restore --worktree -- .
+            git clean -fd
+            printf '\n\nSecondo tentativo Copilot non riuscito. Conservato il primo tentativo; verifiche reali ripetute dal runner.\n' >> "$RUNNER_TEMP/report.md"
+          fi
           test "$(wc -c < "$RUNNER_TEMP/report.md")" -le 32000
           if grep -Eq '(github_pat_|ghp_|gho_|ghs_)[A-Za-z0-9_]+' "$RUNNER_TEMP/report.md"; then
             echo '::error::Possibile credenziale nel report'; exit 1
@@ -345,7 +364,7 @@ jobs:
           audit_status=0
           {
             if [ -f backend/pom.xml ]; then
-              ([ "$JAVA_SETUP" = success ] && cd backend && mvn -B verify) || status=1
+              ([ "$JAVA_SETUP" = success ] && cd backend && mvn -B verify -Dneighborcare.integration.database="${NEIGHBORCARE_DB_TESTS:-false}") || status=1
             fi
             if [ -f frontend/package.json ]; then
               if [ "$NODE_SETUP" = success ]; then
