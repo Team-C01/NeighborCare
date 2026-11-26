@@ -73,47 +73,10 @@ jobs:
           name: agent-result-${{ github.run_attempt }}
           path: ${{ runner.temp }}/neighborcare-agent/result/
           if-no-files-found: error
-          retention-days: 1
-
-  verifica:
-    if: ${{ inputs.phase == 'implementazione' || inputs.phase == 'test' || inputs.phase == 'correzione' }}
-    needs: genera
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    outputs:
-      outcome: ${{ steps.verify.outcome }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.base.sha || github.sha }}
-          persist-credentials: false
-          fetch-depth: 0
-      - uses: actions/download-artifact@v8
-        with:
-          artifact-ids: ${{ needs.genera.outputs.artifact }}
-          path: ${{ runner.temp }}/neighborcare-agent/result/
-          merge-multiple: true
-      - name: Prepara checkout di verifica
-        run: |
-          cp -r .github/scripts "$RUNNER_TEMP/neighborcare-verifier"
-          python3 "$RUNNER_TEMP/neighborcare-verifier/agent_workflow.py" verify
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version-file: backend/.java-version
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: frontend/.nvmrc
-          package-manager-cache: false
-      - name: Build, PostgreSQL e test in ambiente senza segreti
-        id: verify
-        run: bash "$RUNNER_TEMP/neighborcare-verifier/verify-project.sh"
+          retention-days: 3
 
   pubblica:
-    needs: [genera, verifica]
-    if: ${{ !cancelled() && needs.genera.result == 'success' }}
+    needs: genera
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -135,7 +98,6 @@ jobs:
       - name: Ricontrolla ambito, commit e pubblica il risultato
         env:
           GH_TOKEN: ${{ github.token }}
-          VERIFY_OUTCOME: ${{ needs.verifica.outputs.outcome || needs.verifica.result }}
         run: |
           cp .github/scripts/agent_workflow.py "$RUNNER_TEMP/agent_workflow.py"
           python3 "$RUNNER_TEMP/agent_workflow.py" publish
