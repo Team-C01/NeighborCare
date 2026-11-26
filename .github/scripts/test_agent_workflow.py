@@ -78,6 +78,36 @@ class ScopeTests(unittest.TestCase):
         self.assertEqual([c["id"] for c in evidence["issue_comments"]], [2, 3])
         self.assertIn("history_notice", evidence)
 
+    def test_ci_evidence_ignores_approval_only_run(self):
+        blocked = {"id": 3, "status": "completed", "conclusion": "action_required"}
+        green = {"id": 2, "status": "completed", "conclusion": "success"}
+        red = {"id": 4, "status": "completed", "conclusion": "failure"}
+        active = {"id": 5, "status": "in_progress", "conclusion": None}
+        self.assertEqual(a.select_ci_run([blocked, green]), green)
+        self.assertEqual(a.select_ci_run([red, blocked, green]), red)
+        self.assertEqual(a.select_ci_run([active, green]), green)
+        self.assertEqual(a.select_ci_run([active, blocked]), active)
+        self.assertIsNone(a.select_ci_run([blocked]))
+
+    def test_commit_traces_request_without_fake_coauthor(self):
+        message = a.commit_message("test", "issue #55", "demr64",
+                                   ["kappq", "demr64"], "https://github.com/run")
+        self.assertIn("(demr64)", message)
+        self.assertIn("Requested-by: demr64", message)
+        self.assertIn("Task-assignees: kappq, demr64", message)
+        self.assertNotIn("Co-authored-by:", message)
+
+    def test_pr_plan_preserves_approved_version(self):
+        comments = [
+            {"id": 1, "user": {"login": "github-actions[bot]"}, "body": a.PLAN_HEADER + " v1",
+             "created_at": "2026-11-26T10:00:00Z"},
+            {"id": 2, "user": {"login": "github-actions[bot]"}, "body": a.PLAN_HEADER + " v2",
+             "created_at": "2026-11-26T11:00:00Z"},
+        ]
+        pr = {"body": "<!-- neighborcare-approved-plan: 1 -->", "created_at": "2026-11-26T10:30:00Z"}
+        self.assertEqual(a.approved_pr_plan({}, pr, comments), comments[0]["body"])
+        self.assertEqual(a.approved_pr_plan({}, dict(pr, body="Closes #55"), comments), comments[0]["body"])
+
     def test_ci_dispatch(self):
         with patch.object(a, "cmd", return_value="") as call:
             self.assertIn("CI avviata", a.dispatch_ci("agent/issue-1-implementazione"))

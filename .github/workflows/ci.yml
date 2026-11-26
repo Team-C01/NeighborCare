@@ -2,9 +2,11 @@ name: CI
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches-ignore: [main]
+  # Final check on the actual PR merge ref, triggered by the human review.
+  pull_request_review:
+    types: [submitted]
 
 permissions:
   contents: read
@@ -56,7 +58,7 @@ jobs:
             case "$file" in
               backend/src/test/*|frontend/tests/*|frontend/src/*.test.*|frontend/src/*.spec.*)
                 if git cat-file -e "origin/${BASE_REF}:$file" 2>/dev/null; then
-                  echo "::warning::Test esistente modificato: $file — controllare che non siano state indebolite le asserzioni."
+                  echo "Test esistente aggiornato: $file (verificare le asserzioni durante la review)."
                 fi ;;
             esac
           done < <(git diff --name-only "origin/${BASE_REF}...HEAD")

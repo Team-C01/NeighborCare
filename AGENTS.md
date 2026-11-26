@@ -4,7 +4,7 @@
 
 - PM e TM con Write possono aprire Issue, assegnare responsabili e avviare gli agenti. La label `fase:implementazione` applicata dopo il piano costituisce autorizzazione esplicita.
 - Il Tester ha un contesto indipendente e genera test dalla specifica; l'Implementatore non modifica test. Il Revisore AI è consultivo, non può approvare una PR.
-- Una persona Write diversa dall'autore e dai responsabili del task esamina e approva il commit corrente. Il merge è manuale, con CI positiva, Code Owner review. Mai push diretto su main o auto-merge.
+- Una persona Write diversa dall'autore e dai responsabili del task esamina e approva il commit corrente. Il merge è manuale, con CI positiva e review indipendente. Mai push diretto su main o auto-merge.
 
 ## Contesto
 
@@ -20,7 +20,7 @@ Controlli: `git diff --check`, sintassi YAML e link Markdown locali, test degli 
 
 - `frontend/` e `backend/`: destinazione del codice, con il bootstrap tecnico e il codice del progetto.
 - `docs/rad/uc/`: casi d'uso; `docs/modelli/`: UML RAD/SDD; `docs/test/`: Category Partition e Test Frame.
-- `.github/agents/`: quattro profili Copilot separati — Pianificatore, Implementatore, Tester e Revisore. Ogni workflow legge esplicitamente il proprio profilo; le regole comuni sono qui in `AGENTS.md`.
+- `.github/agents/`: quattro profili Copilot separati — Pianificatore, Implementatore, Tester e Revisore. Il runner include nel prompt il profilo e il testo approvato di `AGENTS.md`; non serve rileggere questo file con Copilot.
 
 ## Convenzioni
 
@@ -137,12 +137,12 @@ La struttura e una convenzione di implementazione, non un elenco di file da gene
 - Usare `AGENTE CORREGGI:` per correggere il task sulla PR esistente, `AGENTE TEST:` per rieseguire il Tester, `AGENTE REVISIONE:` per una nuova revisione. Nessuna obbligatorietà di alternare Draft/Ready per ogni correzione.
 - I ruoli sono separati: Pianificatore e Revisore in sola lettura; Implementatore/Correttore limitati a codice applicativo e documentazione ordinaria; Tester limitato ai file di test. Nessuna shell libera, Git, GitHub o credenziali al modello. Pubblicazione tramite runner separato con controllo di percorsi e SHA. Le modifiche a manifest, dipendenze, workflow, documenti approvati, PDF e test frame sono umane e tracciate.
 - Le modifiche applicative devono rispettare lo stesso obiettivo autorizzato. Per un requisito diverso modificare la Issue e far approvare un nuovo piano o creare un nuovo task. Non indebolire o eliminare test per ottenere verde; i test esistenti si aggiornano con motivazione e copertura equivalente o migliore.
-- Dopo ogni commit agente viene richiesta la CI automaticamente. GitHub Actions esegue build/test con PostgreSQL di sviluppo usa e getta, senza passare token Copilot al codice applicativo. In caso di errore, leggere i log, correggere il problema reale e ripetere il controllo. Non usare bypass amministrativi per eludere verifiche.
-- Lo sviluppo manuale è consentito: branch per task, PR tracciata, Test Frame verificati, CI verde, review umana. Non è necessario invocare AI per ogni modifica.
+- La CI parte sui push manuali e dopo ogni commit agente. La review umana finale avvia il check obbligatorio sulla PR; non occorre autorizzare CI duplicate. GitHub Actions esegue build/test con PostgreSQL di sviluppo usa e getta, senza passare token Copilot al codice applicativo. In caso di errore, leggere i log, correggere il problema reale e ripetere il controllo. Non usare bypass amministrativi per eludere verifiche.
+- I commit AI mantengono l'autore bot e riportano il vero richiedente, gli assegnatari e il run. Non attribuire coautorialità automatica a chi ha soltanto avviato una fase. Le PR agentiche ereditano gli assegnatari della Issue. Lo sviluppo manuale è consentito: branch per task, PR tracciata, Test Frame verificati, CI verde, review umana. Non è necessario invocare AI per ogni modifica.
 
 ## Pull Request e merge
 
-GitHub richiede CI repository-checks verde e approvazione di un Code Owner. Il revisore deve essere diverso dall'autore e dai responsabili del task; il team verifica questa indipendenza. La review umana è responsabile di esaminare e risolvere i rilievi reali e di verificare la copertura dei Test Frame prima di approvare. Dopo un nuovo commit le approvazioni precedenti non valgono. Il Revisore AI resta uno strumento di supporto e parte quando si seleziona Ready for review oppure su richiesta.
+GitHub richiede CI repository-checks verde e almeno un'approvazione umana; CODEOWNERS indirizza le richieste di review. Il revisore deve essere diverso dall'autore e dai responsabili del task; il team verifica questa indipendenza. La review umana è responsabile di esaminare e risolvere i rilievi reali e di verificare la copertura dei Test Frame prima di approvare. Dopo un nuovo commit le approvazioni precedenti non valgono. Il Revisore AI resta uno strumento di supporto e parte quando si seleziona Ready for review oppure su richiesta.
 
 ## Quando un task è finito
 

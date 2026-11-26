@@ -10,7 +10,7 @@ Progetto universitario di Ingegneria del Software e Gestione dei Progetti Softwa
 - [.github/agents/](.github/agents/): quattro profili Copilot dedicati a Pianificatore, Implementatore, Tester e Revisore.
 - [.github/ISSUE_TEMPLATE/task-agente.yml](.github/ISSUE_TEMPLATE/task-agente.yml), [template PR](.github/pull_request_template.md) e [CODEOWNERS](.github/CODEOWNERS): task, tracciabilità e responsabilità.
 
-I workflow agentici usano Copilot CLI con un runner condiviso: preparazione del contesto, generazione della patch e pubblicazione separata. La CI è indipendente dall'AI e viene avviata anche dopo i commit degli agenti.
+I workflow agentici usano Copilot CLI con un runner condiviso: preparazione del contesto, generazione della patch e pubblicazione separata. La CI è indipendente dall'AI: parte sui push manuali, dopo ogni commit agente e alla review umana finale. I commit AI riportano il richiedente effettivo, i responsabili e il run; le PR ereditano gli assegnatari della Issue. I commit AI rimangono attribuiti al bot, senza simulare coautori umani.
 
 ## Avvio locale (bootstrap)
 
@@ -41,7 +41,7 @@ Il manifest web rende l'app installabile nei browser compatibili, ma non è conf
 2. Leggere il piano; applicare `fase:implementazione` per approvarlo.
 3. L'Implementatore crea la Draft PR; applicare `fase:test` per il Tester indipendente.
 4. Controllare la CI e il collaudo; selezionare Ready for review per il Revisore AI consultivo.
-5. Review umana indipendente, CI verde e merge manuale.
+5. Review umana indipendente; l'approvazione avvia la CI finale sulla PR. Merge manuale soltanto dopo il check obbligatorio verde.
 
 In caso di problemi usare `AGENTE PIANO:` sulla Issue, `AGENTE CORREGGI:`, `AGENTE TEST:` o `AGENTE REVISIONE:` nella PR. Vedi la [guida operativa](docs/agentic-workflow-iterazioni.md).
 
@@ -52,6 +52,6 @@ In caso di problemi usare `AGENTE PIANO:` sulla Issue, `AGENTE CORREGGI:`, `AGEN
 - [.github/scripts/verify-project.sh](.github/scripts/verify-project.sh): comandi di verifica della CI.
 - [.github/workflows/ci.yml](.github/workflows/ci.yml): controlli automatici, Maven, PostgreSQL, npm, test e audit; nessuna chiamata AI.
 - Secret richiesto: `COPILOT_GITHUB_TOKEN`. Nessun token Claude, nessun servizio aggiuntivo.
-- Protezioni main: review indipendente, CODEOWNERS, repository-checks. Mai push diretto o merge automatico.
+- Protezioni main: review indipendente e repository-checks; CODEOWNERS indica i reviewer. Mai push diretto o merge automatico.
 
 Lo sviluppo manuale è supportato con branch, PR, test e review. Il report AI aiuta il team, ma non sostituisce le verifiche o la responsabilità dei revisori.
