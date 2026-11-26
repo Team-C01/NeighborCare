@@ -63,6 +63,16 @@ jobs:
           java-version-file: backend/.java-version
           cache: maven
           cache-dependency-path: backend/pom.xml
+      - name: Avvia PostgreSQL per i test di integrazione
+        if: ${{ hashFiles('backend/pom.xml') != '' && hashFiles('backend/compose.yaml') != '' }}
+        run: |
+          set -euo pipefail
+          if docker compose -f backend/compose.yaml config --services | grep -qx database; then
+            docker compose -f backend/compose.yaml up -d --wait --wait-timeout 120 database
+            echo 'NEIGHBORCARE_DB_TESTS=true' >> "$GITHUB_ENV"
+          else
+            echo '::notice::Servizio database non presente; nessun test PostgreSQL attivato.'
+          fi
       - name: Verifica reale del backend quando inizializzato
         run: |
           set -euo pipefail
@@ -70,7 +80,7 @@ jobs:
             test -s backend/.java-version || {
               echo "::error::Bootstrap Java incompleto: manca backend/.java-version"; exit 1;
             }
-            (cd backend && mvn -B clean verify)
+            (cd backend && mvn -B clean verify -Dneighborcare.integration.database="${NEIGHBORCARE_DB_TESTS:-false}")
           else
             echo "::notice::Backend non inizializzato: nessuna build o test Maven eseguito."
           fi
@@ -93,6 +103,7 @@ jobs:
             mkdir -p test-results
             rm -f test-results/junit.xml
             npm run test:ci
+            npm audit --audit-level=high
           else
             echo "::notice::Frontend non inizializzato: nessuna build o test frontend eseguito."
           fi
@@ -102,6 +113,7 @@ jobs:
           from pathlib import Path
           import xml.etree.ElementTree as ET
           import sys
+          import os
 
           checks = []
           if Path("backend/pom.xml").is_file():
@@ -117,6 +129,9 @@ jobs:
                       for case in ET.parse(report).getroot().iter("testcase"):
                           total += 1
                           skipped += case.find("skipped") is not None
+                          if name == "Backend" and os.environ.get("NEIGHBORCARE_DB_TESTS") == "true" and case.find("skipped") is not None and "DatabaseIntegrationTest" in case.get("classname", ""):
+                              print("Test di integrazione DB saltato nonostante il database sia attivo")
+                              failed = True
                           errors += case.find("failure") is not None or case.find("error") is not None
               except (OSError, ET.ParseError) as exc:
                   print(f"{name}: report non valido: {exc}")
