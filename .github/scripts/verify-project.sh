@@ -5,7 +5,7 @@ set -euo pipefail
 for file in backend/pom.xml backend/.java-version frontend/package.json frontend/package-lock.json frontend/.nvmrc; do
   test -s "$file" || { echo "Manifest o file versione mancante: $file"; exit 1; }
 done
-project="neighborcare-ci-$"
+project="neighborcare-ci-${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-1}"
 compose=(docker compose -p "$project" -f backend/compose.yaml)
 
 db=false
