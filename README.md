@@ -70,3 +70,5 @@ Per piani respinti, test falliti e revisioni con rilievi, seguire la [procedura 
 ## Verifica workflow agentico
 
 Questa sezione è stata aggiunta per verificare il workflow agentico del Team C01.
+
+Le PR manuali limitate agli artefatti testuali `docs/rad/uc/`, `docs/modelli/`, `docs/test/` e `docs/README.md` seguono CI e review indipendente, senza Tester/Revisore AI applicativi. Se collegate a una Issue assegnata, l'autore deve essere assegnato e il revisore indipendente dagli assegnatari. Conservare i PDF e gli esempi didattici.
