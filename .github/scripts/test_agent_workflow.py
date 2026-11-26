@@ -53,6 +53,31 @@ class ScopeTests(unittest.TestCase):
         with patch.object(a, "pages", return_value=[old]):
             self.assertEqual(a.latest_plan(issue), old)
 
+    def test_planning_history_preserves_conversation(self):
+        comments = [
+            {"id": 1, "user": {"login": "github-actions[bot]"}, "body": a.PLAN_HEADER + "\nPiano 1"},
+            {"id": 2, "user": {"login": "tm"}, "body": "Prima osservazione"},
+            {"id": 3, "user": {"login": "github-actions[bot]"}, "body": a.PLAN_HEADER + "\nPiano 2"},
+            {"id": 4, "user": {"login": "tm"}, "body": "AGENTE PIANO: ultima richiesta"},
+        ]
+        evidence = {"issue": {"body": "Obiettivo"}, "request": comments[-1]["body"]}
+        a.planning_history(comments, evidence)
+        self.assertEqual(evidence["previous_plan"], comments[2]["body"])
+        self.assertEqual([c["id"] for c in evidence["issue_comments"]], [1, 2, 3, 4])
+        self.assertNotIn("history_notice", evidence)
+
+    def test_planning_history_prioritizes_recent_comments(self):
+        comments = [
+            {"id": 1, "user": {"login": "tm"}, "body": "x" * 4000},
+            {"id": 2, "user": {"login": "github-actions[bot]"}, "body": a.PLAN_HEADER + "\nUltimo piano"},
+            {"id": 3, "user": {"login": "tm"}, "body": "AGENTE PIANO: correzione"},
+        ]
+        evidence = {"request": comments[-1]["body"]}
+        a.planning_history(comments, evidence, limit=1500)
+        self.assertEqual(evidence["previous_plan"], comments[1]["body"])
+        self.assertEqual([c["id"] for c in evidence["issue_comments"]], [2, 3])
+        self.assertIn("history_notice", evidence)
+
     def test_ci_dispatch(self):
         with patch.object(a, "cmd", return_value="") as call:
             self.assertIn("CI avviata", a.dispatch_ci("agent/issue-1-implementazione"))
