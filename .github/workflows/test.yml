@@ -306,9 +306,6 @@ jobs:
             const existing=await github.paginate(github.rest.issues.listComments,{
               ...context.repo,issue_number:n,per_page:100
             });
-            if (existing.some(c=>(c.body||'').startsWith('## Tester indipendente — verifica documentale') &&
-                (c.body||'').includes('Commit esaminato: '+context.payload.pull_request.head.sha))) {
-              core.notice('Report N/A gia presente: non duplicare.'); return;
-            }
+            // Una nuova richiesta esplicita pubblica un report N/A aggiornato anche sullo stesso SHA.
             await github.rest.issues.createComment({...context.repo,issue_number:n,
               body:'## Tester indipendente — verifica documentale\n\nCommit esaminato: '+context.payload.pull_request.head.sha+'\nRun Tester: '+context.runId+'\n\nLa PR contiene solo documentazione o governance. Test Frame applicativi N/A: controllare il diff, i collegamenti e i documenti in review. Non sono stati generati test fittizi.'});
