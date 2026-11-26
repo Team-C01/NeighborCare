@@ -47,8 +47,9 @@ Usare ID, classi, attributi, tipi e metodi dei modelli reali. Il Class Diagram p
 
 - Pianificatore e Revisore restano in sola lettura e senza shell.
 - Implementatore e Correttore possono usare esclusivamente i comandi npm/Maven autorizzati nel rispettivo workflow per generare il lockfile, installare le dipendenze approvate, compilare ed eseguire i test esistenti, correggendo il codice entro il piano.
-- Il Tester puo installare dipendenze da lockfile ed eseguire build e test tramite i soli comandi autorizzati; non puo modificare codice applicativo, manifest, lockfile o test esistenti.
-- I comandi sono invocati senza le variabili token GitHub/Copilot indicate nei workflow. Non accedere a credenziali, concatenare comandi, usare una shell libera, cancellare file versionati, eseguire operazioni Git/GitHub o modificare aree protette. I filtri dei tool e i controlli sul diff non costituiscono una sandbox completa: i comandi di build/test possono eseguire codice del progetto.
+- Implementatore e Correttore possono eliminare o rinominare file applicativi non piu utilizzati in `frontend/` o `backend/` se coerente con il piano autorizzato; devono motivare le rimozioni, aggiornare i riferimenti e verificare build e test. Non eliminare test, manifest, file versione, lockfile, Dockerfile, Compose, `.gitkeep`, documenti o file protetti. Usare apply_patch, senza autorizzare rm o cancellazioni ricorsive.
+- Il Tester puo installare dipendenze da lockfile ed eseguire build e test tramite i soli comandi autorizzati; non puo modificare codice applicativo, manifest, lockfile o test esistenti, ne eliminare file versionati.
+- I comandi sono invocati senza le variabili token GitHub/Copilot indicate nei workflow. Non accedere a credenziali, concatenare comandi, usare una shell libera, cancellare file fuori dalle regole sopra, eseguire operazioni Git/GitHub o modificare aree protette. I filtri dei tool e i controlli sul diff non costituiscono una sandbox completa: i comandi di build/test possono eseguire codice del progetto.
 - I controlli deterministici di GitHub Actions e della CI restano obbligatori e indipendenti; i risultati riferiti dal modello non li sostituiscono. Durante il primo bootstrap i controlli finali usano le versioni dichiarate nei manifest appena creati.
 
 ### Chiedi prima
