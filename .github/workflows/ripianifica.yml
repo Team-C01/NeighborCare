@@ -35,6 +35,8 @@ jobs:
                 issue.labels.some(l=>l.name==='fase:implementazione')) {
               core.setFailed('Ripianificazione consentita solo durante la fase:piano.'); return;
             }
+            const prs=await github.paginate(github.rest.pulls.list,{...context.repo,state:'open',head:context.repo.owner+':agent/issue-'+n+'-implementazione',per_page:100});
+            if (prs.some(pr=>!pr.draft)) { core.setFailed('Riportare la PR esistente a Draft prima di ripianificare.'); return; }
             const all=await github.paginate(github.rest.issues.listComments,{...context.repo,issue_number:n,per_page:100});
             const feedback=all.find(c=>c.id===context.payload.comment.id);
             const plans=all.filter(c=>c.user?.login==='github-actions[bot]' &&
