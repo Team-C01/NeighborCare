@@ -80,6 +80,10 @@ jobs:
             const plan=comments.filter(c=>c.user?.login==='github-actions[bot]' &&
               (c.body||'').startsWith('## Piano proposto dal Pianificatore AI')).at(-1);
             if (!plan) { core.setFailed('Piano originale assente.'); return; }
+            const planStates=(plan.body||'').match(/^STATO_PIANO: (PRONTO|BLOCCATO)\s*$/gm)||[];
+            if (planStates.length && (planStates.length!==1 || planStates[0].trim()!=='STATO_PIANO: PRONTO')) {
+              core.setFailed('Piano BLOCCATO o ambiguo: ripianificare prima di correggere.'); return;
+            }
             if (comments.some(c=>assignedMembers.has((c.user?.login||'').toLowerCase()) &&
                 c.created_at>plan.created_at && /^RICHIESTA REVISIONE PIANO:/m.test(c.body||''))) {
               core.setFailed('Revisione del piano ancora richiesta: blocco correzioni.'); return;
