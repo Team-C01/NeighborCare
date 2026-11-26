@@ -1,12 +1,17 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review, labeled]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   repository-checks:
@@ -19,7 +24,7 @@ jobs:
           persist-credentials: false
       - name: Diff senza errori di whitespace
         env:
-          BASE_REF: ${{ github.base_ref }}
+          BASE_REF: ${{ github.base_ref || 'main' }}
         run: git diff --check "origin/${BASE_REF}...HEAD"
       - name: Sintassi YAML e collegamenti Markdown locali
         run: |
@@ -44,7 +49,7 @@ jobs:
           PY
       - name: Segnala modifiche a test gia esistenti
         env:
-          BASE_REF: ${{ github.base_ref }}
+          BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
           set -euo pipefail
           while IFS= read -r file; do
@@ -55,92 +60,20 @@ jobs:
                 fi ;;
             esac
           done < <(git diff --name-only "origin/${BASE_REF}...HEAD")
+      - name: Test della logica dei workflow
+        run: |
+          python3 -m unittest discover -s .github/scripts -p 'test_*.py' -v
+          bash -n .github/scripts/verify-project.sh
       - uses: actions/setup-java@v6
-        if: ${{ hashFiles('backend/pom.xml') != '' }}
         with:
           distribution: temurin
-          problem-matcher: true
           java-version-file: backend/.java-version
           cache: maven
           cache-dependency-path: backend/pom.xml
-      - name: Avvia PostgreSQL per i test di integrazione
-        if: ${{ hashFiles('backend/pom.xml') != '' && hashFiles('backend/compose.yaml') != '' }}
-        run: |
-          set -euo pipefail
-          services="$(docker compose -f backend/compose.yaml config --services)"
-          if grep -qx database <<< "$services"; then
-            docker compose -f backend/compose.yaml up -d --wait --wait-timeout 120 database
-            echo 'NEIGHBORCARE_DB_TESTS=true' >> "$GITHUB_ENV"
-          else
-            echo '::notice::Servizio database non presente; nessun test PostgreSQL attivato.'
-          fi
-      - name: Verifica reale del backend quando inizializzato
-        run: |
-          set -euo pipefail
-          if [ -f backend/pom.xml ]; then
-            test -s backend/.java-version || {
-              echo "::error::Bootstrap Java incompleto: manca backend/.java-version"; exit 1;
-            }
-            (cd backend && mvn -B clean verify -Dneighborcare.integration.database="${NEIGHBORCARE_DB_TESTS:-false}")
-          else
-            echo "::notice::Backend non inizializzato: nessuna build o test Maven eseguito."
-          fi
       - uses: actions/setup-node@v7
-        if: ${{ hashFiles('frontend/package.json') != '' }}
         with:
           node-version-file: frontend/.nvmrc
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Verifica reale del frontend quando inizializzato
-        run: |
-          set -euo pipefail
-          if [ -f frontend/package.json ]; then
-            test -s frontend/.nvmrc && test -s frontend/package-lock.json || {
-              echo "::error::Bootstrap frontend incompleto: mancano versioni o lockfile"; exit 1;
-            }
-            cd frontend
-            npm ci
-            npm run build
-            mkdir -p test-results
-            rm -f test-results/junit.xml
-            npm run test:ci
-            npm audit --audit-level=high
-          else
-            echo "::notice::Frontend non inizializzato: nessuna build o test frontend eseguito."
-          fi
-      - name: Verifica numero reale di test eseguiti per stack
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import xml.etree.ElementTree as ET
-          import sys
-          import os
-
-          checks = []
-          if Path("backend/pom.xml").is_file():
-              checks.append(("Backend", list(Path("backend/target/surefire-reports").glob("TEST-*.xml")) +
-                            list(Path("backend/target/failsafe-reports").glob("TEST-*.xml"))))
-          if Path("frontend/package.json").is_file():
-              checks.append(("Frontend", [Path("frontend/test-results/junit.xml")]))
-          failed = False
-          for name, reports in checks:
-              total = skipped = errors = 0
-              try:
-                  for report in reports:
-                      for case in ET.parse(report).getroot().iter("testcase"):
-                          total += 1
-                          skipped += case.find("skipped") is not None
-                          if name == "Backend" and os.environ.get("NEIGHBORCARE_DB_TESTS") == "true" and case.find("skipped") is not None and "DatabaseIntegrationTest" in case.get("classname", ""):
-                              print("Test di integrazione DB saltato nonostante il database sia attivo")
-                              failed = True
-                          errors += case.find("failure") is not None or case.find("error") is not None
-              except (OSError, ET.ParseError) as exc:
-                  print(f"{name}: report non valido: {exc}")
-                  failed = True
-              executed = total - skipped
-              print(f"{name}: eseguiti={executed}, falliti/errori={errors}, saltati={skipped}")
-              if executed <= 0 or errors:
-                  failed = True
-          if failed:
-              sys.exit("Test mancanti, non eseguiti o falliti.")
-          PY
+      - name: Build, PostgreSQL, test e audit
+        run: bash .github/scripts/verify-project.sh
