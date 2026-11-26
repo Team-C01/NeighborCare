@@ -95,13 +95,13 @@ jobs:
         if: ${{ steps.guard.outputs.docs_only == 'false' }}
         run: npm install -g @github/copilot@1.0.114
       - uses: actions/setup-java@v6
-        if: ${{ steps.guard.outputs.docs_only == 'false' && hashFiles('backend/pom.xml', 'backend/.java-version') != '' && hashFiles('backend/.java-version') != '' }}
+        if: ${{ steps.guard.outputs.docs_only == 'false' && hashFiles('backend/pom.xml') != '' && hashFiles('backend/.java-version') != '' }}
         with:
           distribution: temurin
           problem-matcher: true
           java-version-file: backend/.java-version
       - uses: actions/setup-node@v7
-        if: ${{ steps.guard.outputs.docs_only == 'false' && hashFiles('frontend/package.json', 'frontend/.nvmrc') != '' && hashFiles('frontend/.nvmrc') != '' }}
+        if: ${{ steps.guard.outputs.docs_only == 'false' && hashFiles('frontend/package.json') != '' && hashFiles('frontend/.nvmrc') != '' }}
         with:
           node-version-file: frontend/.nvmrc
           package-manager-cache: false
