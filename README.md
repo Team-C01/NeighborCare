@@ -10,7 +10,7 @@ Progetto universitario di Ingegneria del Software e Gestione dei Progetti Softwa
 - [.github/agents/](.github/agents/): quattro profili Copilot dedicati a Pianificatore, Implementatore, Tester e Revisore.
 - [.github/ISSUE_TEMPLATE/task-agente.yml](.github/ISSUE_TEMPLATE/task-agente.yml), [template PR](.github/pull_request_template.md) e [CODEOWNERS](.github/CODEOWNERS): task, tracciabilità e responsabilità.
 
-I workflow agentici usano Copilot CLI con un runner condiviso: preparazione del contesto, generazione della patch, preverifica isolata e pubblicazione separata. La CI è indipendente dall'AI.
+I workflow agentici usano Copilot CLI con un runner condiviso: preparazione del contesto, generazione della patch e pubblicazione separata. La CI è indipendente dall'AI e viene avviata anche dopo i commit degli agenti.
 
 ## Avvio locale (bootstrap)
 
@@ -37,7 +37,7 @@ Il manifest web rende l'app installabile nei browser compatibili, ma non è conf
 
 ## Flusso di lavoro
 
-1. Creare e assegnare una Issue `task-agente`; applicare `fase:piano`.
+1. Creare una Issue e assegnare i responsabili; applicare `fase:piano`.
 2. Leggere il piano; applicare `fase:implementazione` per approvarlo.
 3. L'Implementatore crea la Draft PR; applicare `fase:test` per il Tester indipendente.
 4. Controllare la CI e il collaudo; selezionare Ready for review per il Revisore AI consultivo.
@@ -49,7 +49,7 @@ In caso di problemi usare `@agente piano` sulla Issue, `@agente correggi`, `@age
 
 - [.github/workflows/esegui-fase.yml](.github/workflows/esegui-fase.yml): workflow riutilizzabile per i quattro ruoli.
 - [.github/scripts/agent_workflow.py](.github/scripts/agent_workflow.py): preparazione, validazione e pubblicazione delle modifiche.
-- [.github/scripts/verify-project.sh](.github/scripts/verify-project.sh): comandi di verifica condivisi tra runner e CI.
+- [.github/scripts/verify-project.sh](.github/scripts/verify-project.sh): comandi di verifica della CI.
 - [.github/workflows/ci.yml](.github/workflows/ci.yml): controlli automatici, Maven, PostgreSQL, npm, test e audit; nessuna chiamata AI.
 - Secret richiesto: `COPILOT_GITHUB_TOKEN`. Nessun token Claude, nessun servizio aggiuntivo.
 - Protezioni main: review indipendente, CODEOWNERS, repository-checks. Mai push diretto o merge automatico.
