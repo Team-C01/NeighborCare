@@ -109,7 +109,6 @@ jobs:
           package-manager-cache: false
       - name: Build, PostgreSQL e test in ambiente senza segreti
         id: verify
-        continue-on-error: true
         run: bash "$RUNNER_TEMP/neighborcare-verifier/verify-project.sh"
 
   pubblica:
