@@ -319,7 +319,7 @@ jobs:
         with:
           node-version-file: frontend/.nvmrc
           package-manager-cache: false
-      - name: Genera lockfile npm per il primo bootstrap frontend
+      - name: Genera o aggiorna lockfile npm dai manifest
         id: lockfile
         continue-on-error: true
         if: ${{ steps.guard.outputs.mode == 'new' && steps.final_node.outcome == 'success' && hashFiles('frontend/package.json') != '' }}
@@ -331,10 +331,9 @@ jobs:
             rm -f package-lock.json
             npm install --package-lock-only --ignore-scripts --no-audit --no-fund
             test -s package-lock.json
-          else
-            test -s frontend/package-lock.json || {
-              echo '::error::Lockfile mancante in un frontend gia inizializzato.'; exit 1;
-            }
+          elif ! git diff --quiet HEAD -- frontend/package.json || [ ! -s frontend/package-lock.json ]; then
+            (cd frontend && npm install --package-lock-only --ignore-scripts --no-audit --no-fund)
+            test -s frontend/package-lock.json
           fi
       - name: Compila e verifica il codice prima della PR
         if: ${{ steps.guard.outputs.mode == 'new' }}
@@ -359,6 +358,11 @@ jobs:
           if [ -f frontend/package.json ]; then
             if [ "$NODE_SETUP" = success ] && [ "$LOCK_SETUP" = success ] && (cd frontend && npm ci && npm run build); then
               echo '- Frontend: npm ci e build riusciti.' >> "$report"
+              if (cd frontend && npm audit --audit-level=high); then
+                echo '- Audit npm: nessuna vulnerabilita alta/critica rilevata.' >> "$report"
+              else
+                echo '- Audit npm: vulnerabilita alte/critiche o verifica non riuscita; analizzare con Correzione AI prima del merge.' >> "$report"
+              fi
               if ! git cat-file -e HEAD:frontend/package.json 2>/dev/null &&
                  ! git ls-files frontend/tests frontend/src | grep -E '\.(test|spec)\.[A-Za-z0-9]+$' >/dev/null; then
                 echo '- Frontend: test NON ESEGUITI (primo bootstrap, in attesa del Tester).' >> "$report"
