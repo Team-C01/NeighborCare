@@ -8,6 +8,8 @@ permissions:
   contents: read
   pull-requests: write
   issues: read
+  actions: read
+  checks: read
 
 concurrency:
   group: revisione-${{ github.event.pull_request.number }}
@@ -71,6 +73,13 @@ jobs:
                 !/Risultato dei test automatici \(exit code\):\s*0\b/.test(tested.body||''))) {
               core.setFailed('Eseguire e superare il Tester prima di Ready for review.'); return;
             }
+            // Verifica provenienza del report del Tester e della run, non la sola stringa del bot.
+            const testedRunId=(tested.body||'').match(/^Run Tester:\s*(\d+)\s*$/m)?.[1];
+            if (!testedRunId) { core.setFailed('Report Tester senza run verificabile.'); return; }
+            const {data:testedRun}=await github.rest.actions.getWorkflowRun({...context.repo,run_id:Number(testedRunId)});
+            if (testedRun.name!=='Tester indipendente' || testedRun.conclusion!=='success' || testedRun.head_branch!==pr.head.ref) {
+              core.setFailed('Tester non verificato: attendere esito positivo sul branch corrente.'); return;
+            }
             core.setOutput('already_present','false');
             const files=await github.paginate(github.rest.pulls.listFiles,{
               ...context.repo,pull_number:pr.number,per_page:100
@@ -81,6 +90,7 @@ jobs:
         if: ${{ steps.guard.outputs.already_present == 'false' }}
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         if: ${{ steps.guard.outputs.already_present == 'false' }}
         with:
@@ -96,7 +106,7 @@ jobs:
         run: |
           set -euo pipefail
           gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
-            --json number,title,body,closingIssuesReferences > "$RUNNER_TEMP/pr.json"
+            --json number,title,body,comments,closingIssuesReferences,headRefOid > "$RUNNER_TEMP/pr.json"
           gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/diff-full.txt"
           gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --name-only > "$RUNNER_TEMP/files.txt"
           # Il lockfile generato puo dominare il diff senza aggiungere logica applicativa.
@@ -110,6 +120,54 @@ jobs:
           test "$(wc -c < "$RUNNER_TEMP/diff.txt")" -le 100000 || {
             echo "::error::Diff applicativa troppo ampia per la revisione AI: suddividere il task"; exit 1;
           }
+      - name: Raccogli evidenze verificabili, cronologia e controlli dello SHA
+        if: ${{ steps.guard.outputs.already_present == 'false' }}
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs=require('fs'),path=require('path');
+            const pr=context.payload.pull_request;
+            const root=process.env.RUNNER_TEMP;
+            const commits=await github.paginate(github.rest.pulls.listCommits,{...context.repo,pull_number:pr.number,per_page:100});
+            const evidence=[];
+            for (const commit of commits.slice(-80)) {
+              const {data:detail}=await github.rest.repos.getCommit({...context.repo,ref:commit.sha,per_page:100});
+              evidence.push({sha:commit.sha,author:commit.author?.login||null,message:commit.commit.message,files:(detail.files||[]).map(f=>({path:f.filename,status:f.status})),files_truncated:(detail.files||[]).length>=100});
+            }
+            const comments=await github.paginate(github.rest.issues.listComments,{...context.repo,issue_number:pr.number,per_page:100});
+            const selected=comments.filter(c=>c.user?.login==='github-actions[bot]' || (c.author_association!=='NONE' && c.author_association!=='CONTRIBUTOR')).slice(-35);
+            const records=selected.map(c=>({id:c.id,author:c.user?.login,association:c.author_association,date:c.created_at,url:c.html_url,body:(c.body||'').slice(0,10000)}));
+            const runs=await github.paginate(github.rest.actions.listWorkflowRunsForRepo,{...context.repo,head_sha:pr.head.sha,per_page:100});
+            const ciRuns=runs.filter(r=>r.name==='CI' && r.head_sha===pr.head.sha).slice(0,10);
+            const checks=await github.paginate(github.rest.checks.listForRef,{...context.repo,ref:pr.head.sha,per_page:100});
+            const runEvidence=ciRuns.map(r=>({id:r.id,sha:r.head_sha,name:r.name,status:r.status,conclusion:r.conclusion,url:r.html_url}));
+            const tested=comments.filter(c=>c.user?.login==='github-actions[bot]' && ((c.body||'').includes('Commit dopo il test: '+pr.head.sha)||(c.body||'').includes('Commit esaminato: '+pr.head.sha)) && (c.body||'').startsWith('## Tester indipendente')).at(-1);
+            const testedId=(tested?.body||'').match(/^Run Tester:\s*(\d+)\s*$/m)?.[1];
+            let testedRun=null;
+            if (testedId) {
+              const {data:r}=await github.rest.actions.getWorkflowRun({...context.repo,run_id:Number(testedId)});
+              testedRun={id:r.id,sha:r.head_sha,name:r.name,branch:r.head_branch,status:r.status,conclusion:r.conclusion,url:r.html_url,report:tested.body};
+            }
+            const result={head:pr.head.sha,base:pr.base.sha,commits:evidence,commits_truncated:commits.length>80,comments:records,tester:testedRun,ci:runEvidence,checks:checks.map(c=>({name:c.name,status:c.status,conclusion:c.conclusion,url:c.details_url}))};
+            fs.writeFileSync(path.join(root,'review-evidence.json'),JSON.stringify(result,null,2));
+      - name: Estrai riferimenti testuali dai PDF reali senza modificare i modelli
+        if: ${{ steps.guard.outputs.already_present == 'false' }}
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/model-excerpts.txt"
+          for file in docs/sdd/C01_SDD.pdf docs/rad/C01_RAD.pdf; do
+            [ -f "$file" ] || continue
+            printf '\n===== %s =====\n' "$file" >> "$RUNNER_TEMP/model-excerpts.txt"
+            if command -v pdftotext >/dev/null; then
+              if pdftotext -layout "$file" "$RUNNER_TEMP/model-text.txt"; then
+                grep -in -A 5 -B 2 -E 'deployment|three.tier|architettura|progressive web|PWA|React|Spring Boot|PostgreSQL' "$RUNNER_TEMP/model-text.txt" | head -c 12000 >> "$RUNNER_TEMP/model-excerpts.txt" || true
+              else
+                echo 'Estrazione non riuscita; verificare il PDF originale in review umana.' >> "$RUNNER_TEMP/model-excerpts.txt"
+              fi
+            else
+              echo 'pdftotext non disponibile; consultare il PDF originale in review umana.' >> "$RUNNER_TEMP/model-excerpts.txt"
+            fi
+          done
       - name: Revisione indipendente e read-only
         if: ${{ steps.guard.outputs.already_present == 'false' }}
         env:
@@ -128,6 +186,10 @@ jobs:
             echo 'Riporta una riga ESITO_REVISIONE: PASS solo se non vi sono rilievi bloccanti.'
             echo 'In caso di errore, incoerenza o dubbi bloccanti usa ESITO_REVISIONE: CHANGES_REQUESTED.'
             echo 'Elenco completo file sotto. Il diff del package-lock.json e escluso solo dal prompt per dimensione: consulta manifest e lockfile nel repository per verificare le dipendenze; segnala eventuali limiti.'
+            echo 'EVIDENZE API sullo SHA corrente: cronologia con file per commit, report Tester verificato, commenti e CI. Distingui fatti API, risultati del runner e dichiarazioni del modello o delle persone. Un diff aggregato non dimostra chi ha creato un file. Non attribuire test all Implementatore se la cronologia mostra commit distinti del Tester; valuta eventuali modifiche manuali motivate sulle asserzioni. Non confondere report storici del bootstrap con verifiche successive. Una CI in corso non e un difetto del codice: il gate finale richiede comunque esito verde. Un test saltato non e superato; se un collaudo manuale copre il frame, attribuisci il risultato a chi lo ha documentato e segnala i limiti.'
+            cat "$RUNNER_TEMP/review-evidence.json"
+            echo 'Estratti testuali dei PDF originali (non sostituiscono diagrammi e immagini):'
+            cat "$RUNNER_TEMP/model-excerpts.txt"
             cat "$RUNNER_TEMP/pr.json" "$RUNNER_TEMP/issue.json" "$RUNNER_TEMP/files.txt" "$RUNNER_TEMP/diff.txt"
           } > "$RUNNER_TEMP/prompt.txt"
           copilot -p "$(cat "$RUNNER_TEMP/prompt.txt")" -s --model=auto --no-ask-user --no-auto-update \
@@ -157,10 +219,10 @@ jobs:
             }
             const marker='## Revisione AI — PR #'+pr.number;
             // Pubblicare una nuova revisione anche sullo stesso SHA se richiesta esplicitamente.
-            const verdictMatch=raw.match(/^ESITO_REVISIONE:\s*(PASS|CHANGES_REQUESTED)\s*$/m);
-            const verdict=verdictMatch?.[1]||'CHANGES_REQUESTED';
+            const verdicts=[...raw.matchAll(/^\s*\*{0,2}ESITO_REVISIONE:\s*(PASS|CHANGES_REQUESTED)\*{0,2}\s*$/gm)].map(m=>m[1]);
+            const verdict=verdicts.length && verdicts.every(v=>v==='PASS') ? 'PASS' : 'CHANGES_REQUESTED';
             let body=raw.replace(/^## Revisione AI[^\n]*\n?/,'').trim();
-            body=body.replace(/Revisione automatica non sostituisce approvazione umana\.\s*$/,'').trim();
+            body=body.replace(/^\s*\*{0,2}ESITO_REVISIONE:\s*(PASS|CHANGES_REQUESTED)\*{0,2}\s*$/gm,'').replace(/Revisione automatica non sostituisce approvazione umana\.\s*$/,'').trim();
             body=marker+'\n\nCommit esaminato: '+pr.head.sha+'\nESITO_REVISIONE: '+verdict+'\n\n'+body+
               '\n\nRevisione automatica non sostituisce approvazione umana.';
             await github.rest.issues.createComment({
