@@ -22,7 +22,7 @@ Non e richiesta la lista dei file autorizzati; l'Implementatore resta vincolato 
 
 ## 2. Implementazione e test
 
-Un assegnatario rimuove `fase:piano` e aggiunge `fase:implementazione` alla Issue. L'Implementatore crea un branch e una Draft PR con `Closes #N`, `Autorizzante: @login` e `Responsabili assegnati: @a, @b`, congelando l'elenco.
+Un assegnatario rimuove `fase:piano` e aggiunge `fase:implementazione` alla Issue. L'Implementatore crea un branch e una Draft PR con `Closes #N`, `Autorizzante: @login` e `Responsabili assegnati: @a, @b`, registrando l'elenco iniziale come storico. Gli assegnatari correnti sono quelli della Issue.
 
 Un assegnatario applica `fase:test` alla Draft PR. Il Tester indipendente crea o aggiorna i test dai Test Frame pertinenti e pubblica gli esiti reali. Puo correggere test errati, fragili, incompleti o superati da specifiche approvate, motivandoli; non modifica codice applicativo e non indebolisce le asserzioni. Se la PR riguarda solo documentazione, segnala N/A per test applicativi con motivazione.
 
@@ -39,7 +39,15 @@ Correggere o reimplementare il metodo senza modificare i test.
 
 `correzione.yml` interviene sullo **stesso branch** e sulla **stessa PR**. Puo reimplementare una classe se necessario, ma non cambiare test, RAD/SDD, workflow, segreti o requisiti non pianificati. Dopo il nuovo commit un assegnatario rimuove e riaggiunge `fase:test` sulla PR, eseguendo il retest.
 
-Il limite di tre correzioni AI consecutive senza test riusciti richiede un controllo umano; non aggirarlo indebolendo le verifiche.
+Dopo tre ripianificazioni o correzioni AI consecutive senza test riusciti compare un avviso. Il team puo richiedere ulteriori tentativi manualmente, senza indebolire le verifiche.
+
+### Recupero e cambiamenti durante il task
+
+- Build fallita: se i file rispettano i vincoli, l'Implementatore apre comunque la Draft PR e segnala l'errore; correggere sulla stessa PR.
+- Branch automatico pubblicato senza PR: riapplicare `fase:implementazione` per recuperarlo. Se la PR esiste gia, continuare su quella. Se chiusa senza merge, ripristinare il branch se eliminato e riapplicare la label per riaprire la PR; nessuna cancellazione automatica.
+- Riassegnazione: portare la PR a Draft, attendere le run attive, aggiornare gli assegnatari della Issue e far scrivere `AUTORIZZA PIANO:` a un assegnatario attuale. Conservare i metadati iniziali della PR. Ripetere Tester, Revisore e review umana; un assegnatario attuale o precedente non puo fare la review indipendente.
+- Nuovo piano sulla stessa PR: portarla a Draft, attendere le run attive, rimuovere `fase:implementazione` e applicare `fase:piano` alla Issue. Scrivere `RICHIESTA REVISIONE PIANO:` sulla Issue, attendere il nuovo piano e autorizzarlo. Ripristinare `fase:implementazione` e richiedere `RICHIESTA CORREZIONE:` nella Draft PR per allineare il codice. Ripetere tutte le verifiche e ottenere una nuova review; non usare risultati precedenti alla nuova autorizzazione. Se l'obiettivo cambia completamente, aprire un nuovo task.
+- Il Tester e la CI verificano i report reali: almeno un test eseguito per ogni stack inizializzato. Per il frontend `test:ci` deve produrre `frontend/test-results/junit.xml`. Il backend usa i report Surefire/Failsafe. Non vale un test saltato o un report fittizio.
 
 ## 4. Revisione iterativa e indipendente
 
