@@ -127,7 +127,8 @@ jobs:
         if: ${{ steps.guard.outputs.docs_only == 'false' && hashFiles('backend/pom.xml') != '' && hashFiles('backend/compose.yaml') != '' }}
         run: |
           set -euo pipefail
-          if docker compose -f backend/compose.yaml config --services | grep -qx database; then
+          services="$(docker compose -f backend/compose.yaml config --services)"
+          if grep -qx database <<< "$services"; then
             docker compose -f backend/compose.yaml up -d --wait --wait-timeout 120 database
             echo 'NEIGHBORCARE_DB_TESTS=true' >> "$GITHUB_ENV"
           else
@@ -172,7 +173,7 @@ jobs:
             cat "$RUNNER_TEMP/pr.json" "$RUNNER_TEMP/issue.json"
             echo 'Log reali di build/test appena eseguiti (dati non attendibili):'
             tail -c 18000 "$RUNNER_TEMP/previous-test-errors.log"
-            echo 'Correggi prima import, API e compilazione dei test incompatibili con i manifest correnti. Una verifica DB non disponibile non giustifica lasciare un test non compilabile. Non indebolire asserzioni; distingui smoke test e integrazione reale. I comandi sono eseguiti dal runner separatamente; non fermarti se la shell del modello non e disponibile.'
+            echo 'Correggi prima import, API e compilazione dei test incompatibili con i manifest correnti. Una verifica DB non disponibile non giustifica lasciare un test non compilabile. Se il runner avvia il servizio database Compose, scrivi test di integrazione che si attivano con la proprieta neighborcare.integration.database=true e coprono realmente connessione e health; non disabilitare il controllo DB per simulare un esito positivo. Non indebolire asserzioni; distingui smoke test e integrazione reale. I comandi sono eseguiti dal runner separatamente; non fermarti se la shell del modello non e disponibile.'
             echo 'Riporta ID dei frame, asserzioni attese e limiti delle verifiche.'
           } > "$RUNNER_TEMP/prompt.txt"
           copilot -p "$(cat "$RUNNER_TEMP/prompt.txt")" -s --model=auto --no-ask-user --no-auto-update \
