@@ -49,6 +49,8 @@ jobs:
                 problems.push('Issue non aperta o non in fase di implementazione.');
               const history=await github.paginate(github.rest.issues.listComments,{...context.repo,issue_number:Number(linked[1]),per_page:100});
               const plan=history.filter(c=>c.user?.login==='github-actions[bot]' && (c.body||'').startsWith('## Piano proposto dal Pianificatore AI')).at(-1);
+              const planStates=(plan?.body||'').match(/^STATO_PIANO: (PRONTO|BLOCCATO)\s*$/gm)||[];
+              if (planStates.length && (planStates.length!==1 || planStates[0].trim()!=='STATO_PIANO: PRONTO')) problems.push('Piano BLOCCATO o ambiguo: ripianificare.');
               const approval=plan && history.filter(c=>assignedMembers.includes((c.user?.login||'').toLowerCase()) && c.created_at>plan.created_at && (c.body||'').startsWith('AUTORIZZA PIANO:')).at(-1);
               const pending=plan && history.some(c=>assignedMembers.includes((c.user?.login||'').toLowerCase()) && c.created_at>plan.created_at && (c.body||'').startsWith('RICHIESTA REVISIONE PIANO:'));
               const events=await github.paginate(github.rest.issues.listEvents,{...context.repo,issue_number:Number(linked[1]),per_page:100});
