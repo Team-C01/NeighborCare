@@ -4,13 +4,37 @@ Progetto universitario di Ingegneria del Software e Gestione dei Progetti Softwa
 
 ## Struttura
 
-- [frontend/](frontend/) e [backend/](backend/): cartelle per il futuro codice, contenenti solo `.gitkeep`.
+- [frontend/](frontend/) e [backend/](backend/): bootstrap tecnico minimo per React/PWA e Spring Boot, oltre ai file `.gitkeep`.
 - [docs/README.md](docs/README.md): PDF, UC, diagrammi, Category Partition e Test Frame. Conservare tutti gli esempi XX/YY per i ragazzi; non sono requisiti da implementare.
 - [AGENTS.md](AGENTS.md): contesto, stack, comandi disponibili e regole comuni.
 - [.github/agents/](.github/agents/): quattro profili Copilot dedicati a Pianificatore, Implementatore, Tester e Revisore.
 - [.github/ISSUE_TEMPLATE/task-agente.yml](.github/ISSUE_TEMPLATE/task-agente.yml), [template PR](.github/pull_request_template.md) e [CODEOWNERS](.github/CODEOWNERS): task, tracciabilità e responsabilità.
 
 I workflow seguono i passi 7, 9, 10, 11 e 14 del tutorial, usando Copilot CLI al posto dell'action Claude. Non sono presenti script Python versionati: i controlli deterministici di approvazioni, ambito, output e test restano nei workflow. Le istruzioni specifiche dei quattro ruoli sono nei rispettivi file `.agent.md`, letti esplicitamente dai workflow insieme ad `AGENTS.md`; i workflow mantengono trigger, autorizzazioni e limiti tecnici.
+
+## Avvio locale (bootstrap)
+
+Il frontend usa Node.js `26.13.1` (vedi [frontend/.nvmrc](frontend/.nvmrc)); il backend usa Java `25` e Maven. Per creare il lockfile e installare le dipendenze frontend:
+
+```sh
+npm --prefix frontend install --package-lock-only
+npm --prefix frontend ci
+```
+
+Il frontend usa React `19.3.1`, Vite `7.3.8` e Vitest `5.1.2` con jsdom per i test UI. Il backend usa Spring Boot `4.2.0` con WebMVC, Actuator, JDBC e driver PostgreSQL; le credenziali DB sono configurabili tramite `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` e `DB_PASSWORD`.
+
+In due terminali, eseguire `npm --prefix frontend run dev` e `mvn -f backend/pom.xml spring-boot:run`. Il frontend è disponibile su <http://localhost:5173>, il backend su <http://localhost:8080> e la verifica tecnica di salute su <http://localhost:8080/actuator/health>. Avviando il backend al di fuori di Compose, PostgreSQL deve essere raggiungibile su `localhost:5432`.
+
+Per avviare i tre servizi con Docker Compose, dalla radice del repository eseguire:
+
+```sh
+mvn -B -f backend/pom.xml verify
+docker compose -f backend/compose.yaml up --build
+```
+
+Compose espone frontend e backend rispettivamente sulle porte `5173` e `8080`; PostgreSQL è pubblicato solo su localhost alla porta `5432`. Il database usa il volume persistente `neighborcare-postgres`. Le credenziali dimostrative `neighborcare` / `neighborcare_local` sono esclusivamente per lo sviluppo locale: non riutilizzarle né considerarle segreti adatti a un ambiente condiviso o di produzione. Fermare i servizi con `docker compose -f backend/compose.yaml down`; per mantenere i dati non rimuovere il volume.
+
+Il manifest web rende l'app installabile nei browser compatibili, ma non è configurato un service worker, caching o supporto offline. Il bootstrap comprende smoke test frontend e backend e un test di integrazione PostgreSQL, creati nella fase di testing indipendente. Eseguire `npm --prefix frontend run build`, `npm --prefix frontend run test:ci` e `mvn -B -f backend/pom.xml verify`; `test:ci` produce `frontend/test-results/junit.xml` e fallisce se non sono presenti test. Per verificare anche PostgreSQL avviare il servizio con `docker compose -f backend/compose.yaml up -d --wait database`, quindi eseguire `mvn -B -f backend/pom.xml clean verify -Dneighborcare.integration.database=true`. Il test di integrazione viene saltato quando la proprietà non è attiva.
 
 ## Flusso di lavoro
 
@@ -48,9 +72,9 @@ Un PM puo essere sia chi apre la Issue sia uno degli assegnatari; per una review
 
 [ci.yml](.github/workflows/ci.yml) parte sulle PR verso main e controlla il diff, la sintassi YAML e i collegamenti Markdown locali. Quando compaiono manifest approvati, esegue `mvn -B clean verify` e i comandi npm di build/test, verificando i report XML per almeno un test effettivamente eseguito per stack inizializzato. Il job obbligatorio mantiene il nome `repository-checks` e non chiama modelli.
 
-Implementatore e Correttore possono usare solo i comandi tecnici npm/Maven autorizzati nei workflow per compilare, eseguire i test e correggere il codice; il Tester puo installare da lockfile ed eseguire verifiche, senza modificare il codice applicativo. Pianificatore e Revisore non hanno accesso alla shell. GitHub Actions ripete sempre i controlli indipendenti e gestisce commit, push e PR. Implementatore e Correttore possono eliminare o rinominare soltanto file applicativi obsoleti in backend/ e frontend/, entro il piano autorizzato e con motivazione nel report. Test, manifest, lockfile, file versione, Dockerfile, Compose, .gitkeep, documenti e governance restano protetti dalla rimozione; il Tester non puo eliminare file versionati. I TM possono aggiornare o rimuovere manualmente test obsoleti con motivazione in PR; ripetere `fase:test`, CI e review. Rimuovere e riapplicare `fase:test` consente di ripetere anche una verifica fallita sullo stesso commit.
+L'Implementatore può usare soltanto i comandi tecnici esplicitamente autorizzati. Correttore e Tester ricevono i log delle verifiche eseguite dal runner, con un secondo tentativo guidato dagli errori effettivi; il Tester non modifica codice applicativo o dipendenze. Pianificatore e Revisore non hanno accesso alla shell. GitHub Actions ripete sempre i controlli indipendenti e gestisce commit, push e PR. Implementatore e Correttore possono eliminare o rinominare soltanto file applicativi obsoleti in backend/ e frontend/, entro il piano autorizzato e con motivazione nel report. Test, manifest, lockfile, file versione, Dockerfile, Compose, .gitkeep, documenti e governance restano protetti dalla rimozione; il Tester non puo eliminare file versionati. I TM possono aggiornare o rimuovere manualmente test obsoleti con motivazione in PR; ripetere `fase:test`, CI e review. Rimuovere e riapplicare `fase:test` consente di ripetere anche una verifica fallita sullo stesso commit.
 
-Frontend e backend non sono inizializzati: nessuna build o esecuzione di test applicativi viene simulata. Il bootstrap approvato dovrà inserire `backend/pom.xml`, `backend/.java-version`, `frontend/package.json`, `frontend/package-lock.json`, `frontend/.nvmrc` e script npm `build` e `test:ci` approvati dal team (il comando `test:ci` deve terminare senza watch mode e produrre `frontend/test-results/junit.xml`, report JUnit XML del runner). Fino ad allora una CI verde certifica la governance, non il funzionamento dell'applicazione.
+Il bootstrap comprende i manifest, la pagina frontend minima, l'avvio Spring Boot e la configurazione Compose. Il lockfile frontend è versionato e viene aggiornato da npm quando cambiano le dipendenze; usare `npm ci` per installazioni riproducibili. Il Tester indipendente ha aggiunto i primi test applicativi: `test:ci` è non interattivo, scrive il report JUnit XML reale in `frontend/test-results/junit.xml` e deve fallire se non trova test. Fino a quando Tester e CI non eseguono test reali per ciascuno stack inizializzato, una CI verde certifica solo i controlli effettivamente svolti, non il funzionamento completo dell'applicazione.
 
 PM o TM verifica in GitHub: accessi Write, label `task-agente`, `fase:piano`, `fase:implementazione`, `fase:test`, secret `COPILOT_GITHUB_TOKEN`, permessi per creare PR e Ruleset che richieda 1 approvazione umana, Code Owner review e gli status check `repository-checks` e `governance-gate`. Non serve alcuna variabile `NEIGHBORCARE_SECOND_PM_LOGIN`: le autorizzazioni di PM e TM sono determinate dinamicamente dai permessi GitHub (Write/Maintain/Admin) e dagli assegnatari effettivi della Issue. Le review devono essere effettuate da collaboratori indipendenti, non assegnati al task. Non abilitare API AI esterne o spesa extra; verificare idoneità e quote Copilot/Actions. Le PR del bot possono richiedere un'azione umana per avviare altri workflow.
 

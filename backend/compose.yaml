@@ -1,0 +1,52 @@
+services:
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    networks:
+      - neighborcare
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: neighborcare
+      DB_USER: neighborcare
+      DB_PASSWORD: neighborcare_local
+    ports:
+      - "8080:8080"
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - neighborcare
+
+  database:
+    image: postgres:19.0
+    environment:
+      POSTGRES_DB: neighborcare
+      POSTGRES_USER: neighborcare
+      POSTGRES_PASSWORD: neighborcare_local
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - neighborcare-postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - neighborcare
+
+networks:
+  neighborcare:
+    driver: bridge
+
+volumes:
+  neighborcare-postgres:
