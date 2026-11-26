@@ -8,7 +8,7 @@
 4. Applicare `fase:test` alla PR. Il Tester indipendente aggiunge o aggiorna i test. Se non servono modifiche ai test, lo dichiara senza produrre commit fittizi.
 5. Verificare CI e Test Frame. Se GitHub richiede l'autorizzazione del run del bot, usare il pulsante della CI; Ready for review avvia anche una nuova CI.
 6. Selezionare Ready for review. Il Revisore AI pubblica rilievi e suggerimenti consultivi, con commit, contesto e stato CI.
-7. Una persona con Write non coinvolta nel task verifica i risultati, risolve eventuali rilievi reali e approva la PR. Sono richiesti CI verde, review indipendente, CODEOWNERS e governance-gate. Il merge è manuale.
+7. Una persona con Write non coinvolta nel task verifica i risultati, risolve eventuali rilievi reali e approva la PR. Sono richiesti CI verde, review indipendente, CODEOWNERS. Il merge è manuale.
 
 ## Se qualcosa non va
 
@@ -29,7 +29,7 @@ Un errore di autenticazione Copilot, di GitHub o di disponibilità delle dipende
 
 ## Sviluppo manuale
 
-È sempre possibile lavorare senza agenti: branch per task, PR collegata alla Issue, CI verde, verifica dei Test Frame e review umana indipendente. Gli agenti restano strumenti di supporto. I cambi a dipendenze, configurazione, modelli e governance sono umani e tracciati.
+È sempre possibile lavorare senza agenti: branch per task, PR collegata alla Issue, CI verde, verifica dei Test Frame e review umana indipendente. Gli agenti restano strumenti di supporto. I cambi a dipendenze, configurazione, modelli e workflow sono umani e tracciati.
 
 ## Requisiti tecnici
 
