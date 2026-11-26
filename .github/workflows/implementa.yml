@@ -47,8 +47,8 @@ jobs:
               (c.body||'').startsWith('## Piano proposto dal Pianificatore AI')).at(-1);
             if (!plan) { core.setFailed('Piano AI assente: fermare l implementazione.'); return; }
             const planStates = (plan.body||'').match(/^STATO_PIANO: (PRONTO|BLOCCATO)\s*$/gm) || [];
-            if (planStates.length !== 1 || planStates[0].trim() !== 'STATO_PIANO: PRONTO') {
-              core.setFailed('Piano non eseguibile o precedente al controllo di prontezza: tornare a fase:piano, richiedere revisione e autorizzare il nuovo piano PRONTO.'); return;
+            if (planStates.length && (planStates.length !== 1 || planStates[0].trim() !== 'STATO_PIANO: PRONTO')) {
+              core.setFailed('Piano BLOCCATO o ambiguo: tornare a fase:piano e richiedere revisione.'); return;
             }
             core.setOutput('plan_id',String(plan.id));
             const unresolvedFeedback = comments.some(c =>
@@ -110,6 +110,9 @@ jobs:
                 core.setFailed('Branch esistente non riconosciuto come pubblicazione automatica: recupero manuale senza sovrascriverlo.'); return;
               }
               core.setOutput('mode','recover'); return;
+            }
+            if (planStates.length !== 1) {
+              core.setFailed('Piano precedente al controllo di prontezza: tornare a fase:piano, richiedere revisione e autorizzare il nuovo piano PRONTO.'); return;
             }
             core.setOutput('mode','new');
 
