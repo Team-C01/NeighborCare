@@ -38,10 +38,21 @@ jobs:
             const {data:assignedIssue}=await github.rest.issues.get({...context.repo,issue_number:Number(linked[1])});
             const assignedMembers=(assignedIssue.assignees||[]).map(u=>u.login.toLowerCase()).sort();
             if (assignedIssue.state!=='open' || !assignedMembers.length ||
-                JSON.stringify(assignedMembers)!==JSON.stringify(frozen) ||
+                !assignedIssue.labels.some(l=>l.name==='fase:implementazione') ||
                 !assignedMembers.includes((context.actor||'').toLowerCase())) {
-              core.setFailed('Solo un assegnatario puo avviare il Tester con assegnazione invariata.'); return;
+              core.setFailed('Solo un assegnatario attuale puo avviare il Tester in fase di implementazione.'); return;
             }
+            const issueComments=await github.paginate(github.rest.issues.listComments,{...context.repo,issue_number:Number(linked[1]),per_page:100});
+            const latestPlan=issueComments.filter(c=>c.user?.login==='github-actions[bot]' && (c.body||'').startsWith('## Piano proposto dal Pianificatore AI')).at(-1);
+            const approval=latestPlan && issueComments.filter(c=>assignedMembers.includes((c.user?.login||'').toLowerCase()) && c.created_at>latestPlan.created_at && (c.body||'').startsWith('AUTORIZZA PIANO:')).at(-1);
+            const pending=latestPlan && issueComments.some(c=>assignedMembers.includes((c.user?.login||'').toLowerCase()) && c.created_at>latestPlan.created_at && (c.body||'').startsWith('RICHIESTA REVISIONE PIANO:'));
+            const events=await github.paginate(github.rest.issues.listEvents,{...context.repo,issue_number:Number(linked[1]),per_page:100});
+            const assignmentChange=events.filter(e=>['assigned','unassigned'].includes(e.event)).at(-1);
+            if (!approval || pending || (assignmentChange && approval.created_at<assignmentChange.created_at)) {
+              core.setFailed('Serve una nuova autorizzazione del piano da un assegnatario attuale.'); return;
+            }
+            const {data:approverPerm}=await github.rest.repos.getCollaboratorPermissionLevel({...context.repo,username:approval.user.login});
+            if (!['write','maintain','admin'].includes(approverPerm.permission)) { core.setFailed('Autorizzante senza Write.'); return; }
             const files=await github.paginate(github.rest.pulls.listFiles,{
               ...context.repo,pull_number:pr.number,per_page:100
             });
