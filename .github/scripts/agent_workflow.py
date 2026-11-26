@@ -166,7 +166,7 @@ def context():
             marker = re.search(r"<!-- neighborcare-plan: ([0-9a-f]{64}) -->", previous or "")
             require(not marker or marker.group(1) == fingerprint(issue),
                     "Requisiti cambiati: AGENTE PIANO: sulla Issue, poi AGENTE CORREGGI: con PIANO APPROVATO: ID sulla PR")
-    if plan and EVENT.get("issue", {}).get("updated_at") and plan.get("created_at"):
+    if PHASE == "implementazione" and plan and EVENT.get("issue", {}).get("updated_at") and plan.get("created_at"):
         require(plan["created_at"] <= EVENT["issue"]["updated_at"],
                 "Il piano non era ancora disponibile: riapplicare fase:implementazione dopo averlo letto")
     # Pin trusted rules to the event base, even if main advances during generation.
@@ -225,7 +225,8 @@ def confirmed_coauthors(assignees, comments, phase, used_claims, before):
         match = re.match(r"(?i)^COAUTORE:\s*(implementazione|test|correzione)\s*-\s*(\S[^\r\n]*)", c.get("body") or "")
         if (login in users and c.get("user", {}).get("id") == users[login]["id"]
                 and match and match.group(1).lower() == phase and len(match.group(2).strip()) >= 10
-                and str(c["id"]) not in used_claims and c.get("created_at", "") <= before):
+                and str(c["id"]) not in used_claims and c.get("created_at", "") <= before
+                and c.get("updated_at", c.get("created_at", "")) <= before):
             selected[login] = (users[login], c["id"])
     return list(selected.values())
 
