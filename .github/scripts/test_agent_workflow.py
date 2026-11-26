@@ -1,4 +1,5 @@
 """Tests of deterministic workflow logic (no network or AI calls)."""
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -107,6 +108,56 @@ class ScopeTests(unittest.TestCase):
         pr = {"body": "<!-- neighborcare-approved-plan: 1 -->", "created_at": "2026-11-26T10:30:00Z"}
         self.assertEqual(a.approved_pr_plan({}, pr, comments), comments[0]["body"])
         self.assertEqual(a.approved_pr_plan({}, dict(pr, body="Closes #55"), comments), comments[0]["body"])
+
+    def test_publish_creates_assigned_pr_and_one_ci(self):
+        issue = {"number": 58, "title": "Task tecnico", "body": "Requisiti",
+                 "assignees": [{"login": "tm"}]}
+        ctx = {"issue": issue, "pr": None, "plan": {"id": 42, "html_url": "https://github.com/plan"},
+               "base": "a" * 40, "head": "a" * 40, "branch": "agent/issue-58-implementazione"}
+        with tempfile.TemporaryDirectory() as tmp, patch.multiple(
+                a, ARTIFACT=Path(tmp), PHASE="implementazione", ACTOR="tm",
+                REPO="Team-C01/NeighborCare"):
+            (Path(tmp) / "state.json").write_text(json.dumps(a.state_for(ctx)))
+            (Path(tmp) / "report.md").write_text("Implementato")
+            (Path(tmp) / "changes.patch").write_text("patch")
+            def fake_git(*args):
+                return "b" * 40 + "\n" if args[:2] == ("rev-parse", "HEAD") else ""
+            with patch.dict(a.os.environ, {"GITHUB_RUN_ID": "123"}), \
+                 patch.object(a, "context", return_value=ctx), \
+                 patch.object(a, "pages", return_value=[]), \
+                 patch.object(a, "checkout"), patch.object(a, "git", side_effect=fake_git) as git, \
+                 patch.object(a, "check_scope", return_value=["frontend/src/App.jsx"]), \
+                 patch.object(a, "repo_api", side_effect=[{"number": 59}, {}]) as api, \
+                 patch.object(a, "dispatch_ci", return_value="CI avviata") as dispatch, \
+                 patch.object(a, "comment") as comment:
+                a.publish()
+            self.assertEqual(api.call_args_list[0].args[:2], ("pulls", "POST"))
+            self.assertIn("neighborcare-approved-plan: 42", api.call_args_list[0].args[2]["body"])
+            self.assertEqual(api.call_args_list[1].args, ("issues/59/assignees", "POST", {"assignees": ["tm"]}))
+            dispatch.assert_called_once_with(ctx["branch"])
+            comment.assert_called_once_with(59, "CI avviata")
+            messages = [x.args[2] for x in git.call_args_list if x.args[:2] == ("commit", "-m")]
+            self.assertEqual(len(messages), 1)
+            self.assertIn("Requested-by: tm", messages[0])
+
+    def test_no_changes_does_not_commit_or_dispatch(self):
+        pr = {"number": 59, "assignees": [{"login": "tm"}]}
+        ctx = {"issue": None, "pr": pr, "plan": None,
+               "base": "a" * 40, "head": "b" * 40, "branch": "agent/issue-58-implementazione"}
+        with tempfile.TemporaryDirectory() as tmp, patch.multiple(
+                a, ARTIFACT=Path(tmp), PHASE="test", ACTOR="tm", REPO="Team-C01/NeighborCare"):
+            (Path(tmp) / "state.json").write_text(json.dumps(a.state_for(ctx)))
+            (Path(tmp) / "report.md").write_text("Test gia adeguati")
+            (Path(tmp) / "changes.patch").write_text("")
+            with patch.dict(a.os.environ, {"GITHUB_RUN_ID": "124"}), \
+                 patch.object(a, "context", return_value=ctx), patch.object(a, "checkout"), \
+                 patch.object(a, "git") as git, patch.object(a, "dispatch_ci") as dispatch, \
+                 patch.object(a, "comment") as comment:
+                a.publish()
+            git.assert_not_called()
+            dispatch.assert_not_called()
+            self.assertIn("Nessuna modifica proposta", comment.call_args.args[1])
+            self.assertIn("Fase avviata da: @tm", comment.call_args.args[1])
 
     def test_ci_dispatch(self):
         with patch.object(a, "cmd", return_value="") as call:
