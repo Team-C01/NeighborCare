@@ -37,3 +37,6 @@ __pycache__/
 
 # Diagnostica locale scaricata da gh-aw (non sorgenti di progetto)
 .github/aw/logs/
+
+# Report dei test generati dalla CI
+frontend/test-results/
