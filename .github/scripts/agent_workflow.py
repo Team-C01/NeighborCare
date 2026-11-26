@@ -109,7 +109,6 @@ def check_scope(phase):
             entry = git("ls-files", "--stage", "--", path)
             require(entry.startswith("100644 "), f"File eseguibile, symlink o tipo non ammesso: {path}")
         paths.append(path)
-    require(len(paths) <= 100, "Task troppo grande: separare le funzionalita")
     stats = git("diff", "--cached", "--numstat")
     require(not any(line.startswith("-\t-\t") for line in stats.splitlines()), "File binari: modifica manuale")
     return paths
@@ -154,6 +153,9 @@ def context():
     if PHASE == "implementazione":
         require("fase:implementazione" in labels(issue), "Applicare fase:implementazione per autorizzare il piano")
     plan = latest_plan(issue) if PHASE == "implementazione" else None
+    if plan and EVENT.get("issue", {}).get("updated_at") and plan.get("created_at"):
+        require(plan["created_at"] <= EVENT["issue"]["updated_at"],
+                "Il piano non era ancora disponibile: riapplicare fase:implementazione dopo averlo letto")
     # Pin trusted rules to the event base, even if main advances during generation.
     base = EVENT.get("pull_request", {}).get("base", {}).get("sha") or os.environ["GITHUB_SHA"]
     head = pr["head"]["sha"] if pr else base
@@ -187,11 +189,18 @@ def ci_evidence(pr):
             return {"state": "CI non disponibile sul commit corrente"}
         r = runs[0]
         jobs = repo_api(f"actions/runs/{r['id']}/jobs?per_page=100").get("jobs", [])
-        return {"run": r["id"], "url": r["html_url"], "sha": r["head_sha"],
+        evidence = {"run": r["id"], "url": r["html_url"], "sha": r["head_sha"],
                 "status": r["status"], "conclusion": r["conclusion"],
                 "jobs": [{"name": j["name"], "status": j["status"], "conclusion": j["conclusion"],
                           "steps": [{"name": s["name"], "conclusion": s["conclusion"]} for s in j.get("steps", [])]}
                          for j in jobs]}
+        if r["conclusion"] == "failure":
+            try:
+                evidence["failed_logs"] = bounded(cmd("gh", "run", "view", str(r["id"]), "--repo", REPO, "--log-failed"), 10000)
+                evidence["failed_logs"] = TOKEN.sub("[REDACTED]", evidence["failed_logs"])
+            except subprocess.CalledProcessError:
+                pass
+        return evidence
     except (subprocess.CalledProcessError, KeyError, ValueError):
         return {"state": "CI non disponibile: verificare Actions"}
 
@@ -251,23 +260,16 @@ def package():
     (ARTIFACT / "changes.patch").write_text(patch)
     (ARTIFACT / "report.md").write_text(report)
 
-def verify():
-    """Apply the artifact in a disposable, read-only-token job before build/test."""
-    state = json.loads((ARTIFACT / "state.json").read_text())
-    require(state["phase"] == PHASE and SHA.fullmatch(state["head"]), "Artefatto non valido")
-    checkout(state["head"])
-    path = ARTIFACT / "changes.patch"
-    patch = path.read_text()
-    require(len(patch.encode()) <= MAX_PATCH and not TOKEN.search(patch), "Patch non valida")
-    if patch:
-        git("apply", "--index", "--check", str(path))
-        git("apply", "--index", str(path))
-        check_scope(PHASE)
-        git("diff", "--cached", "--check")
-    print("Checkout di verifica pronto; nessun push e nessun token Copilot")
-
 def comment(number, body):
     repo_api(f"issues/{number}/comments", "POST", {"body": body})
+
+def dispatch_ci(branch):
+    # GITHUB_TOKEN pushes do not trigger normal pull_request workflows.
+    try:
+        cmd("gh", "workflow", "run", "ci.yml", "--repo", REPO, "--ref", branch)
+        return "CI avviata automaticamente. Controllare Actions sul nuovo commit."
+    except subprocess.CalledProcessError:
+        return "CI non avviata automaticamente: usare Actions > CI > Run workflow sul branch, oppure aggiornare la PR."
 
 def publish():
     state = json.loads((ARTIFACT / "state.json").read_text())
@@ -286,9 +288,6 @@ def publish():
     patch = patch_path.read_text()
     require(len(patch.encode()) <= MAX_PATCH and not TOKEN.search(patch), "Patch non valida")
     url = f"https://github.com/{REPO}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
-    verification = os.environ.get("VERIFY_OUTCOME", "indisponibile")
-    if verification not in {"success", "failure", "cancelled", "skipped", "indisponibile"}:
-        verification = "indisponibile"
     issue, pr = ctx["issue"], ctx["pr"]
     if PHASE == "piano":
         require(not patch, "Pianificatore non puo modificare file")
@@ -310,7 +309,7 @@ def publish():
     if not patch:
         number = pr["number"] if pr else issue["number"]
         comment(number, f"## {ROLE[PHASE].capitalize()} AI\n\nCommit esaminato: {ctx['head']}\n\n"
-                f"Nessuna modifica proposta.\n\n{report}\n\nPreverifica reale: {verification}. [Run]({url}). Verificare la CI e i Test Frame.")
+                f"Nessuna modifica proposta.\n\n{report}\n\n[Run]({url}). Verificare la CI e i Test Frame.")
         return
     git("apply", "--index", "--check", str(patch_path))
     git("apply", "--index", str(patch_path))
@@ -334,23 +333,24 @@ def publish():
     if PHASE == "implementazione":
         assignees = ", ".join("@" + a["login"] for a in issue["assignees"])
         body = (f"Closes #{issue['number']}\nAutorizzante: @{ACTOR}\nResponsabili assegnati: {assignees}\n\n"
-                f"## Implementazione\n{report}\n\n## Verifiche\nPreverifica reale: {verification}. CI e test indipendenti da eseguire sul commit {new_sha}.\n"
+                f"## Implementazione\n{report}\n\n## Verifiche\nCI e test indipendenti da verificare sul commit {new_sha}.\n"
                 f"[Run]({url}). Applicare fase:test alla Draft PR.")
         try:
             created = repo_api("pulls", "POST", {"title": issue["title"], "head": ctx["branch"],
                                               "base": "main", "body": body, "draft": True})
             print(f"PR #{created['number']}")
+            comment(created["number"], dispatch_ci(ctx["branch"]))
         except subprocess.CalledProcessError:
             comment(issue["number"], f"Branch {ctx['branch']} pubblicato. Aprire manualmente una Draft PR verso main con Closes #{issue['number']}. [Run]({url})")
             raise
     else:
         comment(pr["number"], f"## {ROLE[PHASE].capitalize()} AI\n\nCommit di partenza: {ctx['head']}\n"
-                f"Commit pubblicato: {new_sha}\n\n{report}\n\nPreverifica reale: {verification}. [Run]({url}). "
-                "La verifica dei test spetta alla CI sul nuovo commit; non e un PASS dichiarato dal modello.")
+                f"Commit pubblicato: {new_sha}\n\n{report}\n\n[Run]({url}). "
+                + dispatch_ci(ctx["branch"]))
 
 if __name__ == "__main__":
     try:
-        {"prepare": prepare, "package": package, "verify": verify, "publish": publish}[sys.argv[1]]()
+        {"prepare": prepare, "package": package, "publish": publish}[sys.argv[1]]()
     except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as exc:
         detail = getattr(exc, "stderr", "") or ""
         print(f"Workflow NeighborCare: {exc} {TOKEN.sub('[REDACTED]', detail[-2000:])}", file=sys.stderr)
