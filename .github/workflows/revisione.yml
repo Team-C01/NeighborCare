@@ -47,30 +47,21 @@ jobs:
             const comments=await github.paginate(github.rest.issues.listComments,{
               ...context.repo,issue_number:pr.number,per_page:100
             });
-            const tested=comments.some(c=>c.user?.login==='github-actions[bot]' &&
+            const tested=comments.filter(c=>c.user?.login==='github-actions[bot]' &&
               ((c.body||'').startsWith('## Tester indipendente — verifica documentale') &&
                 (c.body||'').includes('Commit esaminato: '+pr.head.sha) ||
                (c.body||'').startsWith('## Tester indipendente — PR #'+pr.number) &&
-                (c.body||'').includes('Commit dopo il test: '+pr.head.sha) &&
-                /Risultato dei test automatici \(exit code\):\s*0\b/.test(c.body||'')));
-            if (!tested) { core.setFailed('Eseguire e superare il Tester prima di Ready for review.'); return; }
-            const marker='## Revisione AI — PR #'+pr.number;
-            if (comments.some(c=>(c.body||'').startsWith(marker) &&
-                (c.body||'').includes('Commit esaminato: '+pr.head.sha))) {
-              core.setOutput('already_present','true');
-              core.notice('Questo commit e gia stato revisionato: nessuna chiamata AI.'); return;
+                (c.body||'').includes('Commit dopo il test: '+pr.head.sha))).at(-1);
+            if (!tested || ((tested.body||'').startsWith('## Tester indipendente — PR #') &&
+                !/Risultato dei test automatici \(exit code\):\s*0\b/.test(tested.body||''))) {
+              core.setFailed('Eseguire e superare il Tester prima di Ready for review.'); return;
             }
             core.setOutput('already_present','false');
             const files=await github.paginate(github.rest.pulls.listFiles,{
               ...context.repo,pull_number:pr.number,per_page:100
             });
-            if (!files.length || files.length>80) {
-              core.setFailed('PR vuota o troppo ampia: suddividere per consentire la review.'); return;
-            }
-            const size=files.reduce((sum,f)=>sum+(f.patch||'').length,0);
-            if (size>70000) {
-              core.setFailed('Diff oltre 70000 caratteri: suddividere la PR.'); return;
-            }
+            if (!files.length) { core.setFailed('PR vuota.'); return; }
+            if (files.length>80) core.warning('PR ampia: verificare tutti i file pertinenti.');
       - uses: actions/checkout@v7
         if: ${{ steps.guard.outputs.already_present == 'false' }}
         with:
@@ -91,7 +82,10 @@ jobs:
           set -euo pipefail
           gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,closingIssuesReferences > "$RUNNER_TEMP/pr.json"
-          gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/diff.txt"
+          gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/diff-full.txt"
+          gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --name-only > "$RUNNER_TEMP/files.txt"
+          # Il lockfile generato puo dominare il diff senza aggiungere logica applicativa.
+          awk '/^diff --git / { skip=($0=="diff --git a/frontend/package-lock.json b/frontend/package-lock.json") } !skip' "$RUNNER_TEMP/diff-full.txt" > "$RUNNER_TEMP/diff.txt"
           : > "$RUNNER_TEMP/issue.json"
           for issue in $(jq -r '.closingIssuesReferences[].number' "$RUNNER_TEMP/pr.json"); do
             gh issue view "$issue" --repo "$GITHUB_REPOSITORY" \
@@ -99,7 +93,7 @@ jobs:
             break
           done
           test "$(wc -c < "$RUNNER_TEMP/diff.txt")" -le 100000 || {
-            echo "::error::Diff completa troppo ampia per la revisione AI"; exit 1;
+            echo "::error::Diff applicativa troppo ampia per la revisione AI: suddividere il task"; exit 1;
           }
       - name: Revisione indipendente e read-only
         if: ${{ steps.guard.outputs.already_present == 'false' }}
@@ -118,7 +112,8 @@ jobs:
             echo 'Include una sezione Diff, Modelli, Test, Rischi e Limiti; nessuna approvazione automatica.'
             echo 'Riporta una riga ESITO_REVISIONE: PASS solo se non vi sono rilievi bloccanti.'
             echo 'In caso di errore, incoerenza o dubbi bloccanti usa ESITO_REVISIONE: CHANGES_REQUESTED.'
-            cat "$RUNNER_TEMP/pr.json" "$RUNNER_TEMP/issue.json" "$RUNNER_TEMP/diff.txt"
+            echo 'Elenco completo file sotto. Il diff del package-lock.json e escluso solo dal prompt per dimensione: consulta manifest e lockfile nel repository per verificare le dipendenze; segnala eventuali limiti.'
+            cat "$RUNNER_TEMP/pr.json" "$RUNNER_TEMP/issue.json" "$RUNNER_TEMP/files.txt" "$RUNNER_TEMP/diff.txt"
           } > "$RUNNER_TEMP/prompt.txt"
           copilot -p "$(cat "$RUNNER_TEMP/prompt.txt")" -s --model=auto --no-ask-user --no-auto-update \
             --disable-builtin-mcps --available-tools='view,grep,glob' \
@@ -146,13 +141,7 @@ jobs:
               core.setFailed('PR cambiata o tornata Draft durante la revisione: ripetere il controllo.'); return;
             }
             const marker='## Revisione AI — PR #'+pr.number;
-            const comments=await github.paginate(github.rest.issues.listComments,{
-              ...context.repo,issue_number:pr.number,per_page:100
-            });
-            if (comments.some(c=>(c.body||'').startsWith(marker) &&
-                (c.body||'').includes('Commit esaminato: '+pr.head.sha))) {
-              core.notice('Report gia presente per lo stesso commit.'); return;
-            }
+            // Pubblicare una nuova revisione anche sullo stesso SHA se richiesta esplicitamente.
             const verdictMatch=raw.match(/^ESITO_REVISIONE:\s*(PASS|CHANGES_REQUESTED)\s*$/m);
             const verdict=verdictMatch?.[1]||'CHANGES_REQUESTED';
             let body=raw.replace(/^## Revisione AI[^\n]*\n?/,'').trim();

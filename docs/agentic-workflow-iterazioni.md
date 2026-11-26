@@ -24,7 +24,7 @@ Non e richiesta la lista dei file autorizzati; l'Implementatore resta vincolato 
 
 Un assegnatario rimuove `fase:piano` e aggiunge `fase:implementazione` alla Issue. L'Implementatore crea un branch e una Draft PR con `Closes #N`, `Autorizzante: @login` e `Responsabili assegnati: @a, @b`, congelando l'elenco.
 
-Un assegnatario applica `fase:test` alla Draft PR. Il Tester indipendente deriva e realizza i test dai Test Frame pertinenti e pubblica gli esiti reali. Se la PR riguarda solo documentazione, segnala N/A per test applicativi con motivazione.
+Un assegnatario applica `fase:test` alla Draft PR. Il Tester indipendente crea o aggiorna i test dai Test Frame pertinenti e pubblica gli esiti reali. Puo correggere test errati, fragili, incompleti o superati da specifiche approvate, motivandoli; non modifica codice applicativo e non indebolisce le asserzioni. Se la PR riguarda solo documentazione, segnala N/A per test applicativi con motivazione.
 
 ## 3. Iterazione della correzione
 
@@ -60,6 +60,6 @@ Il merge e **sempre manuale**: PM e TM con le autorizzazioni necessarie possono 
 - Piano non partito: verificare Write, Issue `task-agente`, assegnatari e label `fase:piano`.
 - Piano errato: `RICHIESTA REVISIONE PIANO:` nella Issue; poi nuova `AUTORIZZA PIANO:`.
 - Implementazione errata: `RICHIESTA CORREZIONE:` nella Draft PR e retest.
-- Tester errato: verificare i Test Frame e correggere le specifiche tramite task dedicato, senza forzare verde.
+- Test errato: verificare i Test Frame; il Tester puo correggere il test e motivare la modifica. Per rimuovere o rinominare test obsoleti, il TM interviene manualmente sul branch e motiva il diff. Se cambia la specifica, serve una decisione approvata. Riapplicare `fase:test` anche sullo stesso commit, poi ripetere review; non forzare verde.
 - Revisore AI o persona rifiuta: Convert to draft, correzione, retest e nuova review.
 - Nuovo commit: ripetere le verifiche e non riutilizzare la review sul vecchio SHA.
