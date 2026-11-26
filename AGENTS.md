@@ -6,7 +6,7 @@
 - **Assegnatari:** uno qualsiasi dei collaboratori assegnati, PM o TM, puo richiedere `RICHIESTA REVISIONE PIANO:`, autorizzare il piano corrente con `AUTORIZZA PIANO:`, avviare Implementatore, Tester e Revisore e richiedere correzioni. Non serve elencare i file autorizzati nel commento.
 - **Review indipendente:** un collaboratore Write (PM o TM) **non incluso nell'elenco degli assegnatari** esamina e approva il commit corrente. Se il PM esegue il task, non puo anche approvarne la PR. Nessuna approvazione PM obbligatoria.
 - **Merge:** manuale da PM o TM autorizzati, soltanto quando CI, Tester, Revisore, governance-gate e review umana sono positivi. Vietato auto-merge e push diretto su main.
-- **Assegnazioni tracciate:** la PR registra `Autorizzante:` e `Responsabili assegnati:`. Dopo l'autorizzazione, la lista non puo cambiare senza una nuova verifica.
+- **Assegnazioni tracciate:** la PR registra `Autorizzante:` e `Responsabili assegnati:`. Questi dati descrivono l'avvio e restano come storico. La Issue determina gli assegnatari attuali; dopo ogni riassegnazione un assegnatario attuale autorizza nuovamente il piano, poi ripetere Tester e review. Nessun assegnatario attuale o precedente puo approvare come revisore indipendente.
 
 ## Contesto
 
@@ -52,7 +52,7 @@ Usare ID, classi, attributi, tipi e metodi dei modelli reali. Il Class Diagram p
 - Componenti React e pagine: PascalCase e file `.jsx` omonimi (es. `DettaglioRichiesta.jsx`). Funzioni, props, variabili e gestori eventi: camelCase (es. `gestisciInvio`). Hook personalizzati: prefisso `use` e camelCase (es. `useRichieste`). Moduli JavaScript non componenti: camelCase (es. `richiestaService.js`); seguire le estensioni previste dalla configurazione approvata. Non introdurre TypeScript senza approvazione.
 - Risorse condivise: `src/assets/images`, `src/assets/styles`, `src/components`, `src/services` o `src/utilities` solo quando realmente condivise. CSS con nomi coerenti e leggibili (es. `dettaglio-richiesta` per classi CSS). Risorse PWA pubbliche in `public/` secondo la configurazione approvata.
 - I componenti React gestiscono presentazione, input e feedback; le chiamate al backend passano dai servizi frontend. La logica di business e l'accesso a PostgreSQL restano nel backend; non replicarli nel browser.
-- Test frontend: `frontend/tests/unit/` e `frontend/tests/integration/`; nomi `NomeComponente.test.jsx` o `nomeModulo.test.js` (anche `.spec.*` se coerente con il runner approvato). Mantenere `test:ci` non interattivo e non aggirare i test mancanti.
+- Test frontend: `frontend/tests/unit/` e `frontend/tests/integration/`; nomi `NomeComponente.test.jsx` o `nomeModulo.test.js` (anche `.spec.*` se coerente con il runner approvato). Mantenere `test:ci` non interattivo, con report JUnit XML reale in `frontend/test-results/junit.xml`. Il backend usa i report Surefire/Failsafe in target. Tester e CI verificano almeno un test realmente eseguito (non saltato) per ogni stack inizializzato; non imporre coverage arbitrarie e non generare report fittizi.
 
 ### Struttura di riferimento dei sottosistemi
 
@@ -144,7 +144,10 @@ La struttura e una convenzione di implementazione, non un elenco di file da gene
 - Dopo una correzione, un assegnatario rimuove e riapplica `fase:test`; dopo test riusciti seleziona Ready for review. Il Revisore AI pubblica un verdetto `ESITO_REVISIONE: PASS` o `CHANGES_REQUESTED` sul commit corrente.
 - Se la review AI o umana non e positiva, ripetere Draft, correzione, Tester e revisione senza creare un nuovo task.
 - Una persona Write **non assegnata** effettua una review GitHub APPROVED sul commit corrente. Puo essere PM o TM: non e consentita una autoapprovazione neppure quando l'autore della PR e un bot.
-- Dopo tre tentativi di correzione consecutivi senza test positivi, interrompere le correzioni automatiche e fare un riesame umano. I TM possono intervenire manualmente sul branch del task e rilanciare il Tester. Una nuova applicazione di `fase:test` riesegue i controlli anche sullo stesso commit. Per requisiti, dipendenze o aree protette fuori piano serve un nuovo task.
+- Dopo tre revisioni del piano o tre correzioni consecutive senza test positivi, il workflow mostra un avviso; un membro autorizzato puo richiedere altri tentativi manualmente, preferibilmente dopo un riesame. I TM possono intervenire manualmente sul branch del task e rilanciare il Tester. Una nuova applicazione di `fase:test` riesegue i controlli anche sullo stesso commit. Per cambiamenti entro lo stesso obiettivo, aggiornare e autorizzare il piano; per un obiettivo diverso o aree protette serve un task separato.
+
+- Se setup/build/test iniziali falliscono dopo modifiche applicative ammesse, salvare il lavoro in Draft PR con esito negativo; non pubblicare modifiche fuori ambito. Riapplicare `fase:implementazione` per recuperare un branch automatico rimasto senza PR o una PR chiusa senza merge (ripristinare prima il branch se eliminato). Non sovrascrivere branch manuali o creare duplicati.
+- Per ripianificare con una PR aperta, riportarla a Draft, attendere eventuali run attive, sostituire `fase:implementazione` con `fase:piano` sulla Issue e usare `RICHIESTA REVISIONE PIANO:`. Dopo nuova `AUTORIZZA PIANO:`, ripristinare `fase:implementazione` e usare `RICHIESTA CORREZIONE:` sulla stessa PR. Ripetere Tester, Revisore e review umana; non riusare una review precedente alla nuova autorizzazione.
 
 ### Shell controllata
 
@@ -157,7 +160,7 @@ La struttura e una convenzione di implementazione, non un elenco di file da gene
 
 ### Chiedi prima
 
-Modifiche a requisiti, architettura, interfacce condivise, Test Frame, nuove dipendenze o ambito non pianificato. La modifica richiede decisione del team e una nuova pianificazione.
+Modifiche a requisiti, architettura, interfacce condivise, Test Frame, nuove dipendenze o ambito non pianificato. La modifica richiede decisione del team e una nuova pianificazione; se resta nello stesso obiettivo, mantenere Issue, branch e PR esistenti.
 
 ### Mai
 
