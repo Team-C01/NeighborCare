@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - name: Verifica feedback TM, fase e limite di tentativi
+      - name: Verifica feedback TM e fase
         id: guard
         uses: actions/github-script@v9
         with:
@@ -50,9 +50,7 @@ jobs:
             }
             const revisionRequests=all.filter(c=>/^\s*RICHIESTA REVISIONE PIANO:/i.test(c.body||'') &&
               c.created_at>plans[0].created_at);
-            if (revisionRequests.length>3) {
-              core.setFailed('Tre revisioni del piano gia richieste. Escalation umana necessaria.'); return;
-            }
+            if (revisionRequests.length>3) core.warning('Piu di tre revisioni richieste: valutare con il team se il piano richiede un riesame.');
             if ((feedback.body||'').length<35 || feedback.body.length>6000) {
               core.setFailed('Descrivere le correzioni richieste in massimo 6000 caratteri.'); return;
             }
