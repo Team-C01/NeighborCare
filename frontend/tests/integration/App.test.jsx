@@ -2,6 +2,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it } from 'vitest';
 import App from '../../src/App.jsx';
+import PresentazioneRuoli from '../../src/components/PresentazioneRuoli.jsx';
 
 let container;
 let root;
@@ -78,4 +79,53 @@ it('TF_UI_03 associates the roles section with its accessible heading', async ()
   expect(sezione?.contains(titolo)).toBe(true);
   expect(titolo?.tagName).toBe('H2');
   expect(titolo?.textContent).toBe('Come funziona NeighborCare');
+});
+
+it('TF_LINK_01 links to the unique roles section in the application', async () => {
+  const app = await renderApp();
+  const link = [...app.querySelectorAll('a')].find(
+    (elemento) => elemento.textContent === 'Scopri i ruoli',
+  );
+  const href = link?.getAttribute('href');
+  const sezione = href?.startsWith('#')
+    ? document.getElementById(href.slice(1))
+    : null;
+
+  expect(link).not.toBeUndefined();
+  expect(sezione).toBe(trovaSezioneRuoli(app));
+  expect(sezione?.tagName).toBe('SECTION');
+  expect(
+    [...app.querySelectorAll('[id]')].filter(
+      (elemento) => elemento.id === href?.slice(1),
+    ),
+  ).toHaveLength(1);
+});
+
+it('keeps accessible heading IDs unique across reusable role sections', async () => {
+  const app = await renderApp();
+
+  await act(async () =>
+    root.render(
+      <>
+        <PresentazioneRuoli idSezione="ruoli-uno" />
+        <PresentazioneRuoli idSezione="ruoli-due" />
+      </>,
+    ),
+  );
+
+  const sezioni = [...app.querySelectorAll('section')];
+  const titoliId = sezioni.map((sezione) =>
+    sezione.getAttribute('aria-labelledby'),
+  );
+
+  expect(sezioni).toHaveLength(2);
+  expect(new Set(titoliId).size).toBe(2);
+  sezioni.forEach((sezione, indice) => {
+    const titolo = titoliId[indice]
+      ? document.getElementById(titoliId[indice])
+      : null;
+
+    expect(titolo?.tagName).toBe('H2');
+    expect(sezione.contains(titolo)).toBe(true);
+  });
 });
