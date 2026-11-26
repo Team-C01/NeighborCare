@@ -43,6 +43,8 @@ Dopo tre ripianificazioni o correzioni AI consecutive senza test riusciti compar
 
 ### Recupero e cambiamenti durante il task
 
+Se la PR aveva gia ricevuto approvazioni umane, revocare le approvazioni superate prima di ripianificare o riassegnare sullo stesso SHA. Il gate si aggiorna alla review umana: non riutilizzare un check verde precedente alla nuova autorizzazione, neppure se il codice non cambia.
+
 - Build fallita: se i file rispettano i vincoli, l'Implementatore apre comunque la Draft PR e segnala l'errore; correggere sulla stessa PR.
 - Branch automatico pubblicato senza PR: riapplicare `fase:implementazione` per recuperarlo. Se la PR esiste gia, continuare su quella. Se chiusa senza merge, ripristinare il branch se eliminato e riapplicare la label per riaprire la PR; nessuna cancellazione automatica.
 - Riassegnazione: portare la PR a Draft, attendere le run attive, aggiornare gli assegnatari della Issue e far scrivere `AUTORIZZA PIANO:` a un assegnatario attuale. Conservare i metadati iniziali della PR. Ripetere Tester, Revisore e review umana; un assegnatario attuale o precedente non puo fare la review indipendente.
