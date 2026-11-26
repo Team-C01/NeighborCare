@@ -176,7 +176,7 @@ jobs:
           } > "$RUNNER_TEMP/prompt.txt"
           copilot -p "$(cat "$RUNNER_TEMP/prompt.txt")" -s --model=auto --no-ask-user --no-auto-update \
             --disable-builtin-mcps --available-tools='view,grep,glob,read,edit,create,write,apply_patch,bash' \
-            --allow-tool='edit,write,apply_patch' \
+            --allow-tool='write' --allow-tool='read' \
             --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend install --package-lock-only --ignore-scripts --no-audit --no-fund)' \
             --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend ci)' \
             --allow-tool='shell(env -u COPILOT_GITHUB_TOKEN -u GH_TOKEN -u GITHUB_TOKEN npm --prefix frontend run build)' \
