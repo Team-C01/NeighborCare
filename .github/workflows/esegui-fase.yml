@@ -58,7 +58,7 @@ jobs:
           args=(--disable-builtin-mcps --deny-tool=shell)
           case "$AGENT_PHASE" in
             piano|revisione)
-              args+=(--available-tools=view,grep,glob --deny-tool=write --deny-tool=edit)
+              args+=(--available-tools=view,grep,glob,read --allow-tool=read --deny-tool=write --deny-tool=edit)
               ;;
             *)
               args+=(--available-tools=view,grep,glob,read,write,edit,create,apply_patch --allow-tool=write --allow-tool=read)

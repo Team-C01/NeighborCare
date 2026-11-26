@@ -4,11 +4,11 @@
 
 1. Un PM o TM con Write crea una Issue usando il template Task per agente, assegna i responsabili e applica `fase:piano`.
 2. Il Pianificatore pubblica il piano. Un collaboratore Write lo verifica; se va bene applica `fase:implementazione` (questa label è l'autorizzazione). Non serve un commento aggiuntivo.
-3. L'Implementatore pubblica il codice su un branch del task e apre una Draft PR. Il runner verifica l'ambito prima della pubblicazione; la CI verifica il codice.
+3. L'Implementatore pubblica il codice su un branch del task e apre una Draft PR con gli stessi assegnatari della Issue. Il runner verifica l'ambito prima della pubblicazione; la CI verifica il codice.
 4. Applicare `fase:test` alla PR. Il Tester indipendente aggiunge o aggiorna i test. Se non servono modifiche ai test, lo dichiara senza produrre commit fittizi.
-5. Verificare CI e Test Frame. La CI parte anche dopo un commit dell'agente. Se non parte, usare Actions > CI > Run workflow selezionando il branch della PR.
+5. Verificare CI in Actions e Test Frame. La CI parte sui push manuali e dopo ogni commit dell'agente, senza avvio duplicato su apertura o sincronizzazione PR. Se non parte, usare Actions > CI > Run workflow selezionando il branch della PR.
 6. Selezionare Ready for review. Il Revisore AI pubblica rilievi e suggerimenti consultivi, con commit, contesto e stato CI.
-7. Una persona con Write non coinvolta nel task verifica i risultati, risolve eventuali rilievi reali e approva la PR. Sono richiesti CI verde, review indipendente, CODEOWNERS. Il merge è manuale.
+7. Una persona con Write non coinvolta nel task verifica i risultati, risolve eventuali rilievi reali e approva la PR. La review umana invia la CI finale sul merge proposto: attendere repository-checks verde, quindi effettuare il merge manuale. Il check di una CI avviata via workflow_dispatch da solo non soddisfa il Ruleset.
 
 ## Se qualcosa non va
 
@@ -31,8 +31,8 @@ Un errore di autenticazione Copilot, di GitHub o di disponibilità delle dipende
 
 ## Sviluppo manuale
 
-È sempre possibile lavorare senza agenti: branch per task, PR collegata alla Issue, CI verde, verifica dei Test Frame e review umana indipendente. Gli agenti restano strumenti di supporto. I cambi a dipendenze, configurazione, modelli e workflow sono umani e tracciati.
+È sempre possibile lavorare senza agenti: branch per task, PR collegata alla Issue, CI verde, verifica dei Test Frame e review umana indipendente. Gli agenti restano strumenti di supporto. Per i commit generati, la Git History mostra il bot come autore e il richiedente nel titolo, con responsabili e URL del run nel messaggio. I contributi manuali risultano invece attribuiti ai membri che li hanno realmente effettuati. Non usare coautori fittizi. I cambi a dipendenze, configurazione, modelli e workflow sono umani e tracciati.
 
 ## Requisiti tecnici
 
-Usare il secret COPILOT_GITHUB_TOKEN già configurato; non aggiungere token Claude o servizi a pagamento. La CI esegue Maven, PostgreSQL e npm; nessun token Copilot è passato al codice applicativo. I workflow agentici utilizzano una versione approvata della configurazione da main, per non richiedere un aggiornamento dei branch solo per eseguire un agente. La CI usa il codice della PR.
+Usare il secret COPILOT_GITHUB_TOKEN già configurato; non aggiungere token Claude o servizi a pagamento. La CI esegue Maven, PostgreSQL e npm; nessun token Copilot è passato al codice applicativo. I workflow agentici utilizzano una versione approvata della configurazione da main, per non richiedere un aggiornamento dei branch solo per eseguire un agente. La CI verifica il commit del branch e, alla review, il merge proposto. Non occorre un nuovo token GitHub.
