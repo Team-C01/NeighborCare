@@ -1,0 +1,98 @@
+name: Esegui fase agente
+
+on:
+  workflow_call:
+    inputs:
+      phase:
+        required: true
+        type: string
+    secrets:
+      COPILOT_GITHUB_TOKEN:
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: agente-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+env:
+  AGENT_PHASE: ${{ inputs.phase }}
+
+jobs:
+  genera:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Installa Copilot CLI
+        run: npm install -g @github/copilot@1.0.114
+      - name: Prepara il contesto e verifica le autorizzazioni
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp .github/scripts/agent_workflow.py "$RUNNER_TEMP/agent_workflow.py"
+          python3 "$RUNNER_TEMP/agent_workflow.py" prepare
+      - name: Esegui Copilot in un contesto separato
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          COPILOT_AUTO_UPDATE: 'false'
+        run: |
+          set -euo pipefail
+          test -n "$COPILOT_GITHUB_TOKEN" || { echo '::error::Configurare COPILOT_GITHUB_TOKEN'; exit 1; }
+          root="$RUNNER_TEMP/neighborcare-agent"
+          args=(--disable-builtin-mcps --deny-tool=shell)
+          case "$AGENT_PHASE" in
+            piano|revisione)
+              args+=(--available-tools=view,grep,glob --deny-tool=write --deny-tool=edit)
+              ;;
+            *)
+              args+=(--available-tools=view,grep,glob,read,write,edit,create,apply_patch --allow-tool=write --allow-tool=read)
+              ;;
+          esac
+          copilot -p "$(cat "$root/prompt.txt")" -s --model=auto --no-ask-user --no-auto-update "${args[@]}" > "$root/report.md"
+      - name: Verifica il risultato e crea la patch
+        run: python3 "$RUNNER_TEMP/agent_workflow.py" package
+      - uses: actions/upload-artifact@v7
+        with:
+          name: agent-result-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/neighborcare-agent/result/
+          if-no-files-found: error
+          retention-days: 1
+
+  pubblica:
+    needs: genera
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: agent-result-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/neighborcare-agent/result/
+      - name: Ricontrolla ambito, commit e pubblica il risultato
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp .github/scripts/agent_workflow.py "$RUNNER_TEMP/agent_workflow.py"
+          python3 "$RUNNER_TEMP/agent_workflow.py" publish
