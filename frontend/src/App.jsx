@@ -1,6 +1,9 @@
+import { useId } from 'react';
 import PresentazioneRuoli from './components/PresentazioneRuoli';
 
 function App() {
+  const sezioneRuoliId = useId();
+
   return (
     <main className="pagina-iniziale">
       <section className="scheda-benvenuto" aria-labelledby="titolo">
@@ -9,8 +12,9 @@ function App() {
         <p>
           La piattaforma per coordinare commissioni di vicinato non sanitarie.
         </p>
+        <a href={`#${sezioneRuoliId}`}>Scopri i ruoli</a>
       </section>
-      <PresentazioneRuoli />
+      <PresentazioneRuoli idSezione={sezioneRuoliId} />
     </main>
   );
 }

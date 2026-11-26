@@ -1,10 +1,14 @@
 import { useId } from 'react';
 
-function PresentazioneRuoli() {
+function PresentazioneRuoli({ idSezione }) {
   const titoloId = useId();
 
   return (
-    <section className="presentazione-ruoli" aria-labelledby={titoloId}>
+    <section
+      id={idSezione}
+      className="presentazione-ruoli"
+      aria-labelledby={titoloId}
+    >
       <h2 id={titoloId}>Come funziona NeighborCare</h2>
       <ul className="lista-ruoli">
         <li>
