@@ -50,9 +50,17 @@ class ScopeTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 a.latest_plan(dict(issue, body="Changed"))
         old = dict(plan, body=a.PLAN_HEADER)
-        approval = {"id": 2, "user": {"login": "tm"}, "body": "AUTORIZZA PIANO: ok"}
-        with patch.object(a, "pages", return_value=[old, approval]):
+        with patch.object(a, "pages", return_value=[old]):
             self.assertEqual(a.latest_plan(issue), old)
+
+    def test_ci_dispatch(self):
+        with patch.object(a, "cmd", return_value="") as call:
+            self.assertIn("CI avviata", a.dispatch_ci("agent/issue-1-implementazione"))
+            self.assertIn("--ref", call.call_args.args)
+
+    def test_ordinary_documentation_allowed(self):
+        self.assertTrue(a.permitted_path("implementazione", "docs/guida.md", "A"))
+        self.assertFalse(a.permitted_path("correzione", "docs/rad/uc/UC.md", "M"))
 
     def test_reports_count_skipped_and_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
