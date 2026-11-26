@@ -41,14 +41,26 @@ jobs:
               ?.split(',').map(s=>s.trim().replace(/^@/,'').toLowerCase()).sort();
             const approver=(pr.body||'').match(/^Autorizzante: @([A-Za-z0-9-]+)$/m)?.[1]?.toLowerCase();
             let assignedMembers=[];
+            let approvalTime='';
             if (linked && frozen && approver) {
               const {data:issue}=await github.rest.issues.get({...context.repo,issue_number:Number(linked[1])});
               assignedMembers=(issue.assignees||[]).map(u=>u.login.toLowerCase()).sort();
-              if (issue.state!=='open' || !assignedMembers.length ||
-                  JSON.stringify(assignedMembers)!==JSON.stringify(frozen) ||
-                  !assignedMembers.includes(approver)) {
-                problems.push('Issue o assegnazione TM non coincide con la PR autorizzata.');
+              if (issue.state!=='open' || !assignedMembers.length || !issue.labels.some(l=>l.name==='fase:implementazione'))
+                problems.push('Issue non aperta o non in fase di implementazione.');
+              const history=await github.paginate(github.rest.issues.listComments,{...context.repo,issue_number:Number(linked[1]),per_page:100});
+              const plan=history.filter(c=>c.user?.login==='github-actions[bot]' && (c.body||'').startsWith('## Piano proposto dal Pianificatore AI')).at(-1);
+              const approval=plan && history.filter(c=>assignedMembers.includes((c.user?.login||'').toLowerCase()) && c.created_at>plan.created_at && (c.body||'').startsWith('AUTORIZZA PIANO:')).at(-1);
+              const pending=plan && history.some(c=>assignedMembers.includes((c.user?.login||'').toLowerCase()) && c.created_at>plan.created_at && (c.body||'').startsWith('RICHIESTA REVISIONE PIANO:'));
+              const events=await github.paginate(github.rest.issues.listEvents,{...context.repo,issue_number:Number(linked[1]),per_page:100});
+              const change=events.filter(e=>['assigned','unassigned'].includes(e.event)).at(-1);
+              if (!approval || pending || (change && approval.created_at<change.created_at)) problems.push('Piano o riassegnazione non autorizzati dagli assegnatari attuali.');
+              else {
+                approvalTime=approval.created_at;
+                const {data:perm}=await github.rest.repos.getCollaboratorPermissionLevel({...context.repo,username:approval.user.login});
+                if (!['write','maintain','admin'].includes(perm.permission)) problems.push('Autorizzante privo di Write.');
               }
+              // Escludere anche chi ha lavorato al task prima di una riassegnazione.
+              assignedMembers=[...new Set([...assignedMembers,...frozen,approver,...events.filter(e=>e.event==='assigned'||e.event==='unassigned').map(e=>(e.assignee?.login||'').toLowerCase()).filter(Boolean)])];
             }
             const files=await github.paginate(github.rest.pulls.listFiles,{...context.repo,pull_number:prNumber,per_page:100});
             if (!files.length) problems.push('Diff vuota.');
@@ -106,7 +118,7 @@ jobs:
             const comments=await github.paginate(github.rest.issues.listComments,{...context.repo,issue_number:prNumber,per_page:100});
 
             const testerReport=comments.filter(c=>{
-              if (c.user?.login!=='github-actions[bot]') return false;
+              if (c.user?.login!=='github-actions[bot]' || c.created_at<approvalTime) return false;
               const b=c.body||'';
               return (b.startsWith('## Tester indipendente — verifica documentale') &&
                       b.includes('Commit esaminato: '+sha)) ||
@@ -134,7 +146,7 @@ jobs:
               }
             }
 
-            const reviewerReport=comments.filter(c=>c.user?.login==='github-actions[bot]' &&
+            const reviewerReport=comments.filter(c=>c.user?.login==='github-actions[bot]' && c.created_at>=approvalTime &&
               (c.body||'').startsWith('## Revisione AI — PR #'+prNumber) &&
               (c.body||'').includes('Commit esaminato: '+sha)).at(-1);
             if (!reviewerReport) {
@@ -159,7 +171,7 @@ jobs:
             }
             let independentReview=false;
             for (const [login,review] of latest) {
-              if (review.state!=='APPROVED' || review.commit_id!==sha ||
+              if (review.state!=='APPROVED' || review.commit_id!==sha || (review.submitted_at||'')<approvalTime ||
                   assignedMembers.includes(login) || login==='github-actions[bot]' ||
                   login===(pr.user?.login||'').toLowerCase())
                 continue;
