@@ -14,7 +14,7 @@ Supporto di vicinato per commissioni non sanitarie tra Beneficiari e Neighbor, c
 
 ## Stack e comandi
 
-Stack SDD: React/PWA, Java/Spring Boot, PostgreSQL, architettura Three-Tier. Frontend e backend non sono ancora inizializzati: versioni, dipendenze e comandi di avvio/build/test richiedono una decisione tecnica approvata. Non inventarli.
+Stack SDD: React/PWA, Java/Spring Boot, PostgreSQL, architettura Three-Tier. Per il bootstrap, rispettare le versioni esplicitamente fissate dal team; scegliere e motivare strumenti, dipendenze tecniche ordinarie e configurazioni necessari al piano, senza alterare stack o requisiti. Verificare disponibilita e compatibilita durante installazione/build; non dichiarare verifiche non svolte.
 
 Controlli attuali: `git diff --check`, sintassi YAML e link Markdown locali. La CI esegue anche build e test applicativi soltanto quando sono presenti i manifest approvati; prima del bootstrap ne segnala esplicitamente l'assenza. Per il bootstrap backend servono `backend/pom.xml` e `backend/.java-version`; per il frontend `frontend/package.json`, `frontend/package-lock.json` e `frontend/.nvmrc`.
 
@@ -137,7 +137,7 @@ La struttura e una convenzione di implementazione, non un elenco di file da gene
 
 - Consultare UC, RAD/SDD, diagrammi, specifiche e Test Frame prima di implementare. Segnalare dati mancanti e incoerenze.
 - Un PM o TM con Write crea la Issue `task-agente`, assegna uno o piu collaboratori con Write (anche se stesso) e applica **manualmente** `fase:piano`. L'assegnazione non avvia il Pianificatore.
-- Uno degli assegnatari puo richiedere la ripianificazione tramite `RICHIESTA REVISIONE PIANO:` nella Issue, oppure autorizzare l'ultima versione con `AUTORIZZA PIANO:`. Nessuna lista obbligatoria di file. Il Pianificatore distingue `STATO_PIANO: PRONTO` (decisioni tecniche concrete, autorizzabili con un solo commento) da `STATO_PIANO: BLOCCATO` (richiede chiarimenti e nuova pianificazione). I nuovi task senza PR o branch pubblicato richiedono un piano PRONTO; i piani precedenti privi di stato possono proseguire solo per il recupero/lavoro su PR o branch gia pubblicati. Un piano esplicitamente bloccato non autorizza implementazione, correzioni, test o merge.
+- Uno degli assegnatari puo richiedere la ripianificazione tramite `RICHIESTA REVISIONE PIANO:` nella Issue, oppure autorizzare l'ultima versione con `AUTORIZZA PIANO:`. Nessuna lista obbligatoria di file. Lo stato `STATO_PIANO` e consultivo: segnala rischi o chiarimenti, non sostituisce la decisione dell'assegnatario. Un'autorizzazione esplicita del piano corrente consente di procedere anche con verifiche tecniche pendenti o piani legacy. Non occorre ripianificare per un semplice errore tecnico. Non inventare requisiti o aggirare limiti; se un'ambiguita sostanziale impedisce una parte del lavoro, completare le parti indipendenti e riportare il blocco. CI, test e review restano obbligatori prima del merge.
 - Un assegnatario sostituisce `fase:piano` con `fase:implementazione` sulla Issue. L'Implementatore lavora sul piano autorizzato e crea una Draft PR con `Closes #N`, `Autorizzante:` e `Responsabili assegnati:`.
 - Un assegnatario applica `fase:test` alla Draft PR. Il Tester indipendente produce e aggiorna test dai Test Frame reali, senza alterare codice applicativo. Corregge test esistenti solo per un difetto dimostrabile, copertura mancante o specifica approvata; motiva ogni modifica, senza indebolire le asserzioni.
 - In caso di errori, la PR resta o torna Draft. Un assegnatario o revisore autorizzato scrive sulla PR `RICHIESTA CORREZIONE:`; la Correzione AI puo correggere o reimplementare metodi e classi sullo stesso branch, restando nel piano e nelle aree consentite. Non alterare test, RAD/SDD, PDF o governance.
@@ -161,7 +161,7 @@ La struttura e una convenzione di implementazione, non un elenco di file da gene
 
 ### Chiedi prima
 
-Modifiche a requisiti, architettura, interfacce condivise, Test Frame, nuove dipendenze o ambito non pianificato. La modifica richiede decisione del team e una nuova pianificazione; se resta nello stesso obiettivo, mantenere Issue, branch e PR esistenti.
+Modifiche a requisiti, architettura, interfacce condivise, Test Frame, versioni esplicitamente fissate, dipendenze che cambiano stack/contratti o ambito non pianificato. Le dipendenze tecniche ordinarie strettamente necessarie a realizzare il piano (anche build e runner test) e i dettagli locali possono essere scelti, verificati e documentati senza ulteriori approvazioni. La modifica richiede decisione del team e una nuova pianificazione; se resta nello stesso obiettivo, mantenere Issue, branch e PR esistenti.
 
 ### Mai
 
