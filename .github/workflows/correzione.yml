@@ -221,6 +221,8 @@ jobs:
             esac
           done < <(git diff --cached --no-renames --name-only -z)
       - uses: actions/setup-java@v6
+        id: final_java
+        continue-on-error: true
         if: ${{ steps.guard.outputs.skip == 'false' && hashFiles('backend/pom.xml') != '' }}
         with:
           distribution: temurin
@@ -229,21 +231,25 @@ jobs:
           cache: maven
           cache-dependency-path: backend/pom.xml
       - uses: actions/setup-node@v7
+        id: final_node
+        continue-on-error: true
         if: ${{ steps.guard.outputs.skip == 'false' && hashFiles('frontend/package.json') != '' }}
         with:
           node-version-file: frontend/.nvmrc
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          package-manager-cache: false
       - name: Registra build e test disponibili senza mascherare gli errori
         if: ${{ steps.guard.outputs.skip == 'false' }}
+        env:
+          JAVA_SETUP: ${{ steps.final_java.outcome }}
+          NODE_SETUP: ${{ steps.final_node.outcome }}
         run: |
           set -uo pipefail
           status=0
           if [ -f backend/pom.xml ]; then
-            (cd backend && mvn -B verify) || status=1
+            ([ "$JAVA_SETUP" = success ] && cd backend && mvn -B verify) || status=1
           fi
           if [ -f frontend/package.json ]; then
-            (cd frontend && npm ci && npm run build && npm run test:ci) || status=1
+            ([ "$NODE_SETUP" = success ] && cd frontend && npm ci && npm run build && npm run test:ci) || status=1
           fi
           echo "$status" > "$RUNNER_TEMP/check-status.txt"
           if [ "$status" -ne 0 ]; then
