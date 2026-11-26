@@ -4,7 +4,7 @@
 
 - PM e TM con Write possono aprire Issue, assegnare responsabili e avviare gli agenti. La label `fase:implementazione` applicata dopo il piano costituisce autorizzazione esplicita.
 - Il Tester ha un contesto indipendente e genera test dalla specifica; l'Implementatore non modifica test. Il Revisore AI è consultivo, non può approvare una PR.
-- Una persona Write diversa dall'autore e dai responsabili del task esamina e approva il commit corrente. Il merge è manuale, con CI positiva, Code Owner review e governance-gate. Mai push diretto su main o auto-merge.
+- Una persona Write diversa dall'autore e dai responsabili del task esamina e approva il commit corrente. Il merge è manuale, con CI positiva, Code Owner review. Mai push diretto su main o auto-merge.
 
 ## Contesto
 
@@ -135,14 +135,14 @@ La struttura e una convenzione di implementazione, non un elenco di file da gene
 - Creare una Issue `task-agente`, assegnare responsabili, applicare `fase:piano`, verificare il piano e applicare `fase:implementazione`. L'Implementatore pubblica una Draft PR con Closes #N e responsabilità tracciate. Per ripianificare riapplicare `fase:piano` o scrivere `@agente piano`.
 - Applicare `fase:test` alla PR. Il Tester crea o aggiorna i test dai frame approvati. Se non servono modifiche, non produce commit fittizi. Il runner e la CI eseguono verifiche reali; un test saltato non è superato.
 - Usare `@agente correggi` per correggere il task sulla PR esistente, `@agente test` per rieseguire il Tester, `@agente revisione` per una nuova revisione. I vecchi prefissi RICHIESTA REVISIONE PIANO: e RICHIESTA CORREZIONE: restano compatibili. Nessuna obbligatorietà di alternare Draft/Ready per ogni correzione.
-- I ruoli sono separati: Pianificatore e Revisore in sola lettura; Implementatore/Correttore limitati a codice applicativo e README; Tester limitato ai file di test. Nessuna shell libera, Git, GitHub o credenziali al modello. Pubblicazione tramite runner separato con controllo di percorsi e SHA. Le modifiche a manifest, dipendenze, governance, documenti approvati, PDF e test frame sono umane e tracciate.
+- I ruoli sono separati: Pianificatore e Revisore in sola lettura; Implementatore/Correttore limitati a codice applicativo e README; Tester limitato ai file di test. Nessuna shell libera, Git, GitHub o credenziali al modello. Pubblicazione tramite runner separato con controllo di percorsi e SHA. Le modifiche a manifest, dipendenze, workflow, documenti approvati, PDF e test frame sono umane e tracciate.
 - Le modifiche applicative devono rispettare lo stesso obiettivo autorizzato. Per un requisito diverso modificare la Issue e far approvare un nuovo piano o creare un nuovo task. Non indebolire o eliminare test per ottenere verde; i test esistenti si aggiornano con motivazione e copertura equivalente o migliore.
 - GitHub Actions esegue build/test con PostgreSQL di sviluppo usa e getta, senza passare token Copilot al codice applicativo. In caso di errore, leggere i log, correggere il problema reale e ripetere il controllo. Non usare bypass amministrativi per eludere verifiche.
 - Lo sviluppo manuale è consentito: branch per task, PR tracciata, Test Frame verificati, CI verde, review umana. Non è necessario invocare AI per ogni modifica.
 
-## Governance delle Pull Request
+## Pull Request e merge
 
-Il Ruleset richiede repository-checks, governance-gate, review APPROVED e Code Owner review. Il gate verifica una review indipendente sullo SHA corrente; non interpreta i report AI e non blocca il merge per un verdetto del modello. La review umana è responsabile di esaminare e risolvere i rilievi reali e di verificare la copertura dei Test Frame prima di approvare. Dopo un nuovo commit le approvazioni precedenti non valgono. Il Revisore AI resta uno strumento di supporto e parte quando si seleziona Ready for review oppure su richiesta.
+GitHub richiede CI repository-checks verde e approvazione di un Code Owner. Il revisore deve essere diverso dall'autore e dai responsabili del task; il team verifica questa indipendenza. La review umana è responsabile di esaminare e risolvere i rilievi reali e di verificare la copertura dei Test Frame prima di approvare. Dopo un nuovo commit le approvazioni precedenti non valgono. Il Revisore AI resta uno strumento di supporto e parte quando si seleziona Ready for review oppure su richiesta.
 
 ## Quando un task è finito
 
