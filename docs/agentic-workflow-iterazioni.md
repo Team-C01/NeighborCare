@@ -12,18 +12,20 @@
 
 ## Se qualcosa non va
 
+Per ripianificare, l'agente riceve il testo della Issue, l'ultimo piano, la richiesta attuale e la discussione cronologica, entro il limite del contesto disponibile. Non usa soltanto l'ultimo commento.
+
 Usare un commento nella conversazione della Issue o della PR:
 
 | Dove | Commento | Effetto |
 | --- | --- | --- |
-| Issue | `@agente piano` + spiegazione | Nuovo piano |
-| PR | `@agente correggi` + problema da risolvere | Correzione sul branch della stessa PR |
-| PR | `@agente test` | Nuova sessione Tester |
-| PR | `@agente revisione` | Nuova revisione consultiva |
+| Issue | `AGENTE PIANO:` + spiegazione | Nuovo piano |
+| PR | `AGENTE CORREGGI:` + problema da risolvere | Correzione sul branch della stessa PR |
+| PR | `AGENTE TEST:` | Nuova sessione Tester |
+| PR | `AGENTE REVISIONE:` | Nuova revisione consultiva |
 
-I prefissi precedenti `RICHIESTA REVISIONE PIANO:` e `RICHIESTA CORREZIONE:` restano accettati. Anche rimuovere e riapplicare la label della fase avvia un nuovo run. Non serve una label aggiuntiva, un particolare assegnatario o un commento di autorizzazione. Tester, Revisore e Correttore possono essere usati anche su PR manuali interne. Non occorre convertire la PR in Draft e poi Ready per ogni correzione: una nuova modifica rende comunque obsolete le approvazioni precedenti. Non avviare più agenti sulla stessa PR contemporaneamente; i run sono serializzati.
+Anche rimuovere e riapplicare la label della fase avvia un nuovo run. Non serve una label aggiuntiva, un particolare assegnatario o un commento di autorizzazione. Tester, Revisore e Correttore possono essere usati anche su PR manuali interne. Non occorre convertire la PR in Draft e poi Ready per ogni correzione: una nuova modifica rende comunque obsolete le approvazioni precedenti. Non avviare più agenti sulla stessa PR contemporaneamente; i run sono serializzati.
 
-Per modifiche al requisito, aggiornare la Issue, richiedere un nuovo piano e approvarlo con la label. Se esiste già una PR, continuare sullo stesso branch con @agente correggi, dopo aver condiviso il nuovo piano. Se esiste un branch senza PR perché la creazione automatica è stata negata, aprire manualmente una Draft PR verso main con Closes #N.
+Per modifiche al requisito, aggiornare la Issue, richiedere un nuovo piano e approvarlo con la label. Se esiste già una PR, continuare sullo stesso branch con AGENTE CORREGGI:, dopo aver condiviso il nuovo piano. Se esiste un branch senza PR perché la creazione automatica è stata negata, aprire manualmente una Draft PR verso main con Closes #N.
 
 Un errore di autenticazione Copilot, di GitHub o di disponibilità delle dipendenze non dimostra un difetto nel codice. Consultare il run in Actions e rilanciare la fase solo dopo aver risolto l'errore. Non usare bypass amministrativi per eludere test o review.
 
