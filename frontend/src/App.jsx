@@ -9,7 +9,7 @@ function App() {
       <section className="scheda-benvenuto" aria-labelledby="titolo">
         <p className="etichetta">NeighborCare</p>
         <h1 id="titolo">Il vicinato, un aiuto alla volta.</h1>
-        <p>
+        <p className="descrizione-benvenuto">
           La piattaforma per coordinare commissioni di vicinato non sanitarie.
         </p>
         <a className="link-scopri-ruoli" href={`#${sezioneRuoliId}`}>

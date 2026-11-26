@@ -90,7 +90,7 @@ h1 {
   line-height: 1.05;
 }
 
-.scheda-benvenuto > p:last-child {
+.scheda-benvenuto > .descrizione-benvenuto {
   max-width: 42ch;
   color: #53645d;
   font-size: 1.1rem;
