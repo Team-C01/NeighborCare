@@ -6,7 +6,7 @@
 2. Il Pianificatore pubblica il piano. Un collaboratore Write lo verifica; se va bene applica `fase:implementazione` (questa label è l'autorizzazione). Non serve un commento aggiuntivo.
 3. L'Implementatore pubblica il codice su un branch del task e apre una Draft PR. Il runner verifica l'ambito prima della pubblicazione; la CI verifica il codice.
 4. Applicare `fase:test` alla PR. Il Tester indipendente aggiunge o aggiorna i test. Se non servono modifiche ai test, lo dichiara senza produrre commit fittizi.
-5. Verificare CI e Test Frame. Se GitHub richiede l'autorizzazione del run del bot, usare il pulsante della CI; Ready for review avvia anche una nuova CI.
+5. Verificare CI e Test Frame. La CI parte anche dopo un commit dell'agente. Se non parte, usare Actions > CI > Run workflow selezionando il branch della PR.
 6. Selezionare Ready for review. Il Revisore AI pubblica rilievi e suggerimenti consultivi, con commit, contesto e stato CI.
 7. Una persona con Write non coinvolta nel task verifica i risultati, risolve eventuali rilievi reali e approva la PR. Sono richiesti CI verde, review indipendente, CODEOWNERS. Il merge è manuale.
 
@@ -21,7 +21,7 @@ Usare un commento nella conversazione della Issue o della PR:
 | PR | `@agente test` | Nuova sessione Tester |
 | PR | `@agente revisione` | Nuova revisione consultiva |
 
-I prefissi precedenti `RICHIESTA REVISIONE PIANO:` e `RICHIESTA CORREZIONE:` restano accettati. Anche rimuovere e riapplicare la label della fase avvia un nuovo run. Non occorre convertire la PR in Draft e poi Ready per ogni correzione: una nuova modifica rende comunque obsolete le approvazioni precedenti. Non avviare più agenti sulla stessa PR contemporaneamente; i run sono serializzati.
+I prefissi precedenti `RICHIESTA REVISIONE PIANO:` e `RICHIESTA CORREZIONE:` restano accettati. Anche rimuovere e riapplicare la label della fase avvia un nuovo run. Non serve una label aggiuntiva, un particolare assegnatario o un commento di autorizzazione. Tester, Revisore e Correttore possono essere usati anche su PR manuali interne. Non occorre convertire la PR in Draft e poi Ready per ogni correzione: una nuova modifica rende comunque obsolete le approvazioni precedenti. Non avviare più agenti sulla stessa PR contemporaneamente; i run sono serializzati.
 
 Per modifiche al requisito, aggiornare la Issue, richiedere un nuovo piano e approvarlo con la label. Se esiste già una PR, continuare sullo stesso branch con @agente correggi, dopo aver condiviso il nuovo piano. Se esiste un branch senza PR perché la creazione automatica è stata negata, aprire manualmente una Draft PR verso main con Closes #N.
 
