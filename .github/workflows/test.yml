@@ -212,14 +212,49 @@ jobs:
           set -uo pipefail
           status=0
           if [ -f backend/pom.xml ]; then
-            (cd backend && mvn -B verify) || status=1
+            (cd backend && mvn -B clean verify) || status=1
           fi
           if [ -f frontend/package.json ]; then
-            (cd frontend && npm ci && npm run build && npm run test:ci) || status=1
+            (cd frontend && npm ci && npm run build && mkdir -p test-results && rm -f test-results/junit.xml && npm run test:ci) || status=1
           fi
           echo "$status" > "$RUNNER_TEMP/test-exit.txt"
-          if [ "$status" -eq 1 ]; then
-            echo "::warning::Test falliti: correggere il codice, non indebolire i test."
+      - name: Verifica numero di test effettivamente eseguiti
+        if: ${{ steps.guard.outputs.docs_only == 'false' }}
+        run: |
+          set -uo pipefail
+          python3 - <<'PY' > "$RUNNER_TEMP/test-counts.txt" 2>&1 || echo 1 > "$RUNNER_TEMP/test-exit.txt"
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          import sys
+
+          checks = []
+          if Path("backend/pom.xml").is_file():
+              checks.append(("Backend", list(Path("backend/target/surefire-reports").glob("TEST-*.xml")) +
+                            list(Path("backend/target/failsafe-reports").glob("TEST-*.xml"))))
+          if Path("frontend/package.json").is_file():
+              checks.append(("Frontend", [Path("frontend/test-results/junit.xml")]))
+          failed = False
+          for name, reports in checks:
+              total = skipped = errors = 0
+              try:
+                  for report in reports:
+                      for case in ET.parse(report).getroot().iter("testcase"):
+                          total += 1
+                          skipped += case.find("skipped") is not None
+                          errors += case.find("failure") is not None or case.find("error") is not None
+              except (OSError, ET.ParseError) as exc:
+                  print(f"{name}: report non valido: {exc}")
+                  failed = True
+              executed = total - skipped
+              print(f"{name}: eseguiti={executed}, falliti/errori={errors}, saltati={skipped}")
+              if executed <= 0 or errors:
+                  failed = True
+          if failed:
+              sys.exit("Test mancanti, non eseguiti o falliti.")
+          PY
+          cat "$RUNNER_TEMP/test-counts.txt"
+          if [ "$(cat "$RUNNER_TEMP/test-exit.txt")" -eq 1 ]; then
+            echo "::warning::Test falliti o mancanti: correggere codice o configurazione senza indebolire i test."
           fi
       - name: Verifica SHA e pubblica solo le modifiche ai test
         if: ${{ steps.guard.outputs.docs_only == 'false' }}
@@ -251,6 +286,8 @@ jobs:
             git diff --name-status "$EXPECTED_SHA" HEAD;
             printf '\n';
             cat "$RUNNER_TEMP/tester.md";
+            printf '\nConteggio test verificato dal workflow:\n';
+            cat "$RUNNER_TEMP/test-counts.txt";
             printf '\nRun Tester: %s\n' "$GITHUB_RUN_ID";
             printf '\nRisultato dei test automatici (exit code): ';
             cat "$RUNNER_TEMP/test-exit.txt";
