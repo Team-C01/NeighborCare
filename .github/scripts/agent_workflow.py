@@ -74,7 +74,7 @@ def test_path(path):
              ("/__tests__/" in path or re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path))))
 
 def permitted_path(phase, path, status):
-    """Allow app/test paths only; manifests, models and governance are human-owned."""
+    """Allow app/test paths only; manifests, models and workflow are human-owned."""
     parts = PurePosixPath(path).parts
     if not parts or path.startswith("/") or "\\" in path or any(
             p in {".", ".."} or p.startswith(".") for p in parts):
@@ -215,7 +215,7 @@ def prepare():
     ARTIFACT.mkdir(exist_ok=True)
     ctx = context()
     state = state_for(ctx)
-    # Read governance from the approved base before checking out the task code.
+    # Read workflow from the approved base before checking out the task code.
     checkout(ctx["base"])
     rules = Path("AGENTS.md").read_text()
     role = Path(f".github/agents/{ROLE[PHASE]}.agent.md").read_text()
