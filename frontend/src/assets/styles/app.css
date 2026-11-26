@@ -97,6 +97,11 @@ h1 {
   line-height: 1.6;
 }
 
+.link-scopri-ruoli:focus-visible {
+  outline: 2px solid #39765b;
+  outline-offset: 3px;
+}
+
 @media (min-width: 48rem) {
   .lista-ruoli {
     grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -12,7 +12,9 @@ function App() {
         <p>
           La piattaforma per coordinare commissioni di vicinato non sanitarie.
         </p>
-        <a href={`#${sezioneRuoliId}`}>Scopri i ruoli</a>
+        <a className="link-scopri-ruoli" href={`#${sezioneRuoliId}`}>
+          Scopri i ruoli
+        </a>
       </section>
       <PresentazioneRuoli idSezione={sezioneRuoliId} />
     </main>
