@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import re
 import subprocess
 import sys
+import time
 
 PHASE = os.environ.get("AGENT_PHASE", "")
 REPO = os.environ.get("GITHUB_REPOSITORY", "")
@@ -127,14 +128,25 @@ def latest_plan(issue):
 
 def context():
     require(PHASE in ROLE and REPO == "Team-C01/NeighborCare", "Fase o repository non validi")
-    require(permission(ACTOR) in WRITE, "Serve un collaboratore con permesso Write")
+    automatic_review = (PHASE == "revisione" and os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
+                        and os.environ.get("GITHUB_REF") == "refs/heads/main")
+    require((automatic_review and ACTOR == "github-actions[bot]") or permission(ACTOR) in WRITE,
+            "Serve un collaboratore con permesso Write")
     event_issue = EVENT.get("issue") or {}
     pr_event = EVENT.get("pull_request") or {}
     pr_number = pr_event.get("number") or (event_issue.get("number") if event_issue.get("pull_request") else None)
+    if automatic_review:
+        raw = EVENT.get("inputs", {}).get("pr_number", "")
+        require(re.fullmatch(r"[1-9][0-9]*", raw), "Numero PR non valido")
+        pr_number = int(raw)
     pr = repo_api(f"pulls/{pr_number}") if pr_number else None
     if pr:
         require(pr["state"] == "open" and (pr["head"]["repo"] or {}).get("full_name") == REPO and
                 pr["base"]["ref"] == "main" and pr["head"]["ref"] != "main", "PR non interna verso main")
+        if PHASE == "revisione":
+            require(not pr.get("draft"), "La PR deve essere Ready for review")
+            expected = EVENT.get("inputs", {}).get("head_sha") if automatic_review else pr_event.get("head", {}).get("sha")
+            require(not expected or expected == pr["head"]["sha"], "Revisione obsoleta: attendere quella del nuovo commit")
         issue_number = linked_issue(pr.get("body"))
         if not issue_number:
             match = re.fullmatch(r"agent/issue-(\d+)(?:-implementazione)?", pr["head"]["ref"])
@@ -153,7 +165,20 @@ def context():
     if PHASE == "implementazione":
         require("fase:implementazione" in labels(issue), "Applicare fase:implementazione per autorizzare il piano")
     plan = latest_plan(issue) if PHASE == "implementazione" else None
-    if plan and EVENT.get("issue", {}).get("updated_at") and plan.get("created_at"):
+    if PHASE == "correzione" and issue:
+        request = EVENT.get("comment", {}).get("body") or ""
+        approved = re.search(r"(?im)^PIANO APPROVATO:\s*(\d+)\s*$", request)
+        if approved:
+            plan = latest_plan(issue)
+            require(str(plan["id"]) == approved.group(1), "Indicare l'ID dell'ultimo piano valido della Issue")
+            require(plan.get("created_at", "") <= EVENT.get("comment", {}).get("created_at", ""),
+                    "Il piano non era disponibile al momento dell'approvazione")
+        else:
+            previous = approved_pr_plan(issue, pr, pages(f"issues/{issue['number']}/comments"))
+            marker = re.search(r"<!-- neighborcare-plan: ([0-9a-f]{64}) -->", previous or "")
+            require(not marker or marker.group(1) == fingerprint(issue),
+                    "Requisiti cambiati: AGENTE PIANO: sulla Issue, poi AGENTE CORREGGI: con PIANO APPROVATO: ID sulla PR")
+    if PHASE == "implementazione" and plan and EVENT.get("issue", {}).get("updated_at") and plan.get("created_at"):
         require(plan["created_at"] <= EVENT["issue"]["updated_at"],
                 "Il piano non era ancora disponibile: riapplicare fase:implementazione dopo averlo letto")
     # Pin trusted rules to the event base, even if main advances during generation.
@@ -168,7 +193,9 @@ def state_for(ctx):
     return {"phase": PHASE, "issue": issue["number"] if issue else None,
             "fingerprint": fingerprint(issue) if issue else None,
             "pr": pr["number"] if pr else None, "head": ctx["head"], "base": ctx["base"],
-            "branch": ctx["branch"], "plan": plan["id"] if plan else None}
+            "branch": ctx["branch"], "plan": plan["id"] if plan else None,
+            "pr_plan": re.search(r"<!-- neighborcare-approved-plan: (\d+) -->", (pr or {}).get("body") or "").group(1)
+            if re.search(r"<!-- neighborcare-approved-plan: (\d+) -->", (pr or {}).get("body") or "") else None}
 
 def checkout(sha):
     git("fetch", "--no-tags", "origin", sha)
@@ -199,12 +226,44 @@ def approved_pr_plan(issue, pr, comments):
     plans = [c for c in plans if c.get("created_at", "") <= pr.get("created_at", "")]
     return plans[-1]["body"] if plans else None
 
-def commit_message(phase, subject, actor, assignees, url):
-    # Human request attribution is not human authorship. Keep the bot as author.
-    return (f"agent({phase}): {subject} ({actor})\n\n"
-            f"Requested-by: {actor}\n"
-            f"Task-assignees: {', '.join(assignees) or 'none'}\n"
-            f"Agent-run: {url}")
+def confirmed_coauthors(assignees, comments, phase, used_claims, before):
+    """Use only self-declared, phase-specific contributions by assigned humans."""
+    users = {a["login"].lower(): a for a in assignees if a.get("type") == "User"
+             and isinstance(a.get("id"), int) and a["id"] > 0
+             and re.fullmatch(r"[A-Za-z0-9-]+", a["login"])}
+    selected = {}
+    for c in comments:
+        login = c.get("user", {}).get("login", "").lower()
+        match = re.match(r"(?i)^COAUTORE:\s*(implementazione|test|correzione)\s*-\s*(\S[^\r\n]*)", c.get("body") or "")
+        if (login in users and c.get("user", {}).get("id") == users[login]["id"]
+                and match and match.group(1).lower() == phase and len(match.group(2).strip()) >= 10
+                and str(c["id"]) not in used_claims and c.get("created_at", "") <= before
+                and c.get("updated_at", c.get("created_at", "")) <= before):
+            selected[login] = (users[login], c["id"])
+    return list(selected.values())
+
+def commit_message(phase, subject, actor, assignees, url, coauthors=()):
+    # Keep the bot as author; credit Copilot and confirmed human contributions.
+    message = (f"agent({phase}): {subject} ({actor})\n\n"
+               f"Requested-by: {actor}\n"
+               f"Task-assignees: {', '.join(assignees) or 'none'}\n"
+               f"Agent-run: {url}")
+    for user, claim in coauthors:
+        message += f"\nCoauthor-claim: {claim}"
+    message += "\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+    for user, claim in coauthors:
+        login = user["login"]
+        message += f"\nCo-authored-by: {login} <{user['id']}+{login}@users.noreply.github.com>"
+    return message
+
+def apply_approved_plan(pr, plan):
+    if not plan:
+        return
+    body = pr.get("body") or ""
+    body = re.sub(r"(?m)^<!-- neighborcare-approved-plan: \d+ -->\s*\n?", "", body)
+    body = re.sub(r"(?m)^Piano approvato: https://github\.com/[^\n]+\n?", "", body)
+    body = body.rstrip() + f"\n\n<!-- neighborcare-approved-plan: {plan['id']} -->\nPiano approvato: {plan['html_url']}\n"
+    repo_api(f"pulls/{pr['number']}", "PATCH", {"body": body})
 
 def ci_evidence(pr):
     try:
@@ -280,7 +339,10 @@ def prepare():
                                           for c in comments[-6:]]
     if pr:
         if issue:
-            evidence["approved_plan"] = approved_pr_plan(issue, pr, comments)
+            evidence["approved_plan"] = plan["body"] if plan else approved_pr_plan(issue, pr, comments)
+            marker = re.search(r"<!-- neighborcare-plan: ([0-9a-f]{64}) -->", evidence["approved_plan"] or "")
+            if marker and marker.group(1) != fingerprint(issue):
+                evidence["plan_notice"] = "I requisiti attuali differiscono dal piano approvato. Richiedere nuova pianificazione e approvazione esplicita; non considerare coerente il task senza verifica."
         evidence["pr"] = {"number": pr["number"], "head": ctx["head"], "body": pr.get("body")}
         evidence["pr_comments"] = [{"by": c["user"]["login"], "body": bounded(c.get("body") or "", 2500)}
                                    for c in pages(f"issues/{pr['number']}/comments")[-10:]]
@@ -332,6 +394,85 @@ def dispatch_ci(branch):
     except subprocess.CalledProcessError:
         return "CI non avviata automaticamente: usare Actions > CI > Run workflow sul branch, oppure ripetere il push manualmente."
 
+def test_ci_run(head, branch):
+    response = repo_api(f"actions/workflows/ci.yml/runs?head_sha={head}&per_page=20")
+    return select_ci_run([r for r in response.get("workflow_runs", [])
+                          if r.get("head_sha") == head and r.get("head_branch") == branch])
+
+def wait_for_test_ci(number, head, branch, timeout=27 * 60):
+    """Wait for the independent CI, never execute model-generated code here."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        pr = repo_api(f"pulls/{number}")
+        if pr["state"] != "open" or pr["head"]["sha"] != head:
+            return None, "PR chiusa o commit cambiato durante la verifica: rilanciare sul nuovo commit."
+        run = test_ci_run(head, branch)
+        if run and run["status"] == "completed":
+            return run, None
+        time.sleep(15)
+    return None, "Tempo di attesa CI scaduto: consultare Actions, nessun esito dichiarato."
+
+def testing_result(number, head, branch, new_commit):
+    """Delegate test execution once, then retrieve actual results for this SHA."""
+    try:
+        existing = None if new_commit else test_ci_run(head, branch)
+        if existing is None:
+            started = dispatch_ci(branch)
+            if not started.startswith("CI avviata"):
+                return False, started
+        run, problem = wait_for_test_ci(number, head, branch)
+        if problem:
+            return False, problem
+        jobs = repo_api(f"actions/runs/{run['id']}/jobs?per_page=100").get("jobs", [])
+        checks = next((j for j in jobs if j["name"] == "repository-checks"), None)
+        if not checks or checks.get("status") != "completed":
+            return False, f"Esito del job repository-checks non disponibile. [CI]({run['html_url']})"
+        passed = checks.get("conclusion") == "success"
+        lines = [f"**Esito esecuzione automatica: {'SUPERATA' if passed else 'NON SUPERATA'}.**",
+                 f"Commit verificato: `{head}`.",
+                 f"[CI effettiva]({run['html_url']}).",
+                 "Esecuzione gia disponibile sullo stesso commit, riutilizzata senza duplicare i test."
+                 if existing else "CI avviata dalla fase Tester; esito atteso prima di concludere."]
+        # Only use the current bot's structured CI comment, not arbitrary user text.
+        summary = next((c.get("body") or "" for c in reversed(pages(f"issues/{number}/comments"))
+                        if c.get("user", {}).get("login") == "github-actions[bot]"
+                        and (c.get("body") or "").startswith("<!-- neighborcare-ci-summary -->")
+                        and f"Commit: `{head}`" in c["body"]
+                        and f"/actions/runs/{run['id']})" in c["body"]), "")
+        for stack in ("Backend", "Frontend"):
+            match = re.search(rf"(?m)^- {stack}: ([0-9]+ superati, [0-9]+ falliti/errori, [0-9]+ saltati)$", summary)
+            lines.append(f"- {stack}: {match.group(1) if match else 'conteggi non disponibili; consultare il report CI'}")
+        for stack in ("backend", "frontend"):
+            names = re.search(rf"(?m)^- Test {stack} falliti: ([^\r\n]{{1,2000}})$", summary)
+            if names and names.group(1) != "Nessuno riportato":
+                lines.append(f"- Test {stack} falliti: {names.group(1)}")
+        errors = [step["name"] for step in checks.get("steps") or []
+                  if step.get("conclusion") in {"failure", "timed_out", "cancelled"}]
+        if errors:
+            lines.append("Controlli non superati: " + ", ".join(errors) + ".")
+        if passed:
+            lines.append("Nessun errore nei controlli automatici eseguiti. I test saltati e quelli manuali non valgono come superati.")
+        else:
+            lines.append("Non procedere alla review finale: distinguere errori di test, build o infrastruttura dai log. Usare AGENTE CORREGGI: per difetti applicativi; AGENTE TEST: per test errati o mancanti.")
+        return passed, "\n\n".join(lines)
+    except (subprocess.CalledProcessError, KeyError, ValueError, OSError) as exc:
+        return False, "Esito CI non recuperabile: " + type(exc).__name__ + ". Consultare Actions."
+
+def dispatch_revision(number, head):
+    """Bot pushes do not trigger pull_request_target synchronize; dispatch once if ready."""
+    pr = repo_api(f"pulls/{number}")
+    if pr["state"] != "open" or pr.get("draft") or pr["head"]["sha"] != head:
+        return
+    cmd("gh", "workflow", "run", "revisione.yml", "--repo", REPO, "--ref", "main",
+        "-f", f"pr_number={number}", "-f", f"head_sha={head}")
+
+def complete_testing(number, head, branch, body, new_commit):
+    passed, result = testing_result(number, head, branch, new_commit)
+    comment(number, body + "\n\n## Esito dei test eseguiti\n\n" + result)
+    if new_commit:
+        dispatch_revision(number, head)
+    require(passed, "Fase Tester: verifica automatica non superata o non disponibile; leggere il report nella PR.")
+
 def publish():
     state = json.loads((ARTIFACT / "state.json").read_text())
     ctx = context()
@@ -340,9 +481,8 @@ def publish():
     # of a patch. Re-run generation instead when the patch's reference changed.
     require(all(state[k] == current[k] for k in ("phase", "issue", "pr", "head", "branch", "base")),
             "Branch o commit cambiati durante la fase: rilanciare")
-    if PHASE in {"piano", "implementazione"}:
-        require(state["fingerprint"] == current["fingerprint"] and state["plan"] == current["plan"],
-                "Issue o piano cambiati durante la fase: rilanciare")
+    require(all(state[k] == current[k] for k in ("fingerprint", "plan", "pr_plan")),
+            "Issue o piano cambiati durante la fase: rilanciare")
     report = (ARTIFACT / "report.md").read_text().strip()
     require(report and len(report) <= 24000 and not TOKEN.search(report), "Report non valido")
     patch_path = ARTIFACT / "changes.patch"
@@ -368,9 +508,15 @@ def publish():
             return
     checkout(ctx["head"])
     if not patch:
+        if PHASE == "correzione" and ctx["plan"]:
+            apply_approved_plan(pr, ctx["plan"])
         number = pr["number"] if pr else issue["number"]
-        comment(number, f"## {ROLE[PHASE].capitalize()} AI\n\nFase avviata da: @{ACTOR}\nCommit esaminato: {ctx['head']}\n\n"
-                f"Nessuna modifica proposta.\n\n{report}\n\n[Run]({url}). Verificare la CI e i Test Frame.")
+        body = (f"## {ROLE[PHASE].capitalize()} AI\n\nFase avviata da: @{ACTOR}\nCommit esaminato: {ctx['head']}\n\n"
+                f"Nessuna modifica proposta.\n\n{report}\n\n[Run]({url}).")
+        if PHASE == "test":
+            complete_testing(number, ctx["head"], ctx["branch"], body, False)
+        else:
+            comment(number, body + " Verificare la CI e i Test Frame.")
         return
     git("apply", "--index", "--check", str(patch_path))
     git("apply", "--index", str(patch_path))
@@ -380,8 +526,13 @@ def publish():
     git("config", "user.name", "github-actions[bot]")
     git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
     subject = f"issue #{issue['number']}" if issue else f"PR #{pr['number']}"
-    assignee_logins = [a["login"] for a in (issue or pr or {}).get("assignees", [])]
-    git("commit", "-m", commit_message(PHASE, subject, ACTOR, assignee_logins, url))
+    assigned = (issue or pr or {}).get("assignees", [])
+    assignee_logins = [a["login"] for a in assigned]
+    number = pr["number"] if pr else issue["number"]
+    before = EVENT.get("comment", {}).get("created_at") or (EVENT.get("pull_request") or EVENT.get("issue") or {}).get("updated_at", "")
+    used_claims = set(re.findall(r"(?m)^Coauthor-claim: (\d+)$", git("log", "--format=%B", "HEAD")))
+    coauthors = confirmed_coauthors(assigned, pages(f"issues/{number}/comments"), PHASE, used_claims, before)
+    git("commit", "-m", commit_message(PHASE, subject, ACTOR, assignee_logins, url, coauthors))
     new_sha = git("rev-parse", "HEAD").strip()
     # Non-force push. Check that a new branch really does not exist.
     if not pr:
@@ -414,9 +565,15 @@ def publish():
                 ci_status += " Assegnazione automatica non riuscita: assegnare manualmente i responsabili."
         comment(created["number"], ci_status)
     else:
-        comment(pr["number"], f"## {ROLE[PHASE].capitalize()} AI\n\nFase avviata da: @{ACTOR}\nCommit di partenza: {ctx['head']}\n"
-                f"Commit pubblicato: {new_sha}\n\n{report}\n\n[Run]({url}). "
-                + dispatch_ci(ctx["branch"]))
+        if PHASE == "correzione" and ctx["plan"]:
+            apply_approved_plan(pr, ctx["plan"])
+        body = (f"## {ROLE[PHASE].capitalize()} AI\n\nFase avviata da: @{ACTOR}\nCommit di partenza: {ctx['head']}\n"
+                f"Commit pubblicato: {new_sha}\n\n{report}\n\n[Run]({url}).")
+        if PHASE == "test":
+            complete_testing(pr["number"], new_sha, ctx["branch"], body, True)
+        else:
+            comment(pr["number"], body + " " + dispatch_ci(ctx["branch"]))
+            dispatch_revision(pr["number"], new_sha)
 
 if __name__ == "__main__":
     try:
