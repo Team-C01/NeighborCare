@@ -40,10 +40,10 @@ Il manifest web rende l'app installabile nei browser compatibili, ma non è conf
 1. Creare una Issue e assegnare i responsabili; applicare `fase:piano`.
 2. Leggere il piano; applicare `fase:implementazione` per approvarlo.
 3. L'Implementatore crea la Draft PR; applicare `fase:test` per il Tester indipendente, che genera i test, avvia la CI e attende il risultato effettivo prima di pubblicare l'esito finale.
-4. Controllare il riepilogo CI e il collaudo; selezionare Ready for review per la prima revisione AI. Usare AGENTE REVISIONE: solo dopo modifiche o per un controllo mirato.
+4. Controllare il riepilogo CI e il collaudo; selezionare Ready for review per la prima revisione AI. Dopo nuovi commit su una PR Ready il Revisore si avvia automaticamente.
 5. Review umana indipendente; l'approvazione avvia la CI finale sulla PR. Merge manuale soltanto dopo il check obbligatorio verde.
 
-In caso di problemi usare `AGENTE PIANO:` sulla Issue, `AGENTE CORREGGI:`, `AGENTE TEST:` o `AGENTE REVISIONE:` nella PR. Vedi la [guida operativa](docs/agentic-workflow-iterazioni.md).
+In caso di problemi usare `AGENTE PIANO:` sulla Issue, `AGENTE CORREGGI:` o `AGENTE TEST:` nella PR. Vedi la [guida operativa](docs/agentic-workflow-iterazioni.md).
 
 ## Configurazione
 

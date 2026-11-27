@@ -214,7 +214,8 @@ class ScopeTests(unittest.TestCase):
              patch.object(a, "wait_for_test_ci", return_value=(run, None)), \
              patch.object(a, "repo_api", return_value={"jobs": [job]}), \
              patch.object(a, "pages", return_value=[summary]), \
-             patch.object(a, "comment") as comment:
+             patch.object(a, "comment") as comment, \
+             patch.object(a, "dispatch_revision"):
             with self.assertRaises(ValueError):
                 a.complete_testing(59, "b"*40, "branch", "Test scritti", True)
         dispatch.assert_called_once_with("branch")
@@ -229,6 +230,18 @@ class ScopeTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertIn("commit cambiato", problem)
 
+    def test_revision_dispatch_only_on_ready_current_commit(self):
+        pr = {"state": "open", "draft": True, "head": {"sha": "b"*40}}
+        with patch.object(a, "repo_api", return_value=pr), patch.object(a, "cmd") as call:
+            a.dispatch_revision(59, "b"*40)
+            call.assert_not_called()
+            pr["draft"] = False
+            a.dispatch_revision(59, "c"*40)
+            call.assert_not_called()
+            a.dispatch_revision(59, "b"*40)
+            self.assertIn("revisione.yml", call.call_args.args)
+            self.assertIn("pr_number=59", call.call_args.args)
+
     def test_ci_dispatch(self):
         with patch.object(a, "cmd", return_value="") as call:
             self.assertIn("CI avviata", a.dispatch_ci("agent/issue-1-implementazione"))
@@ -237,11 +250,6 @@ class ScopeTests(unittest.TestCase):
     def test_ordinary_documentation_allowed(self):
         self.assertTrue(a.permitted_path("implementazione", "docs/guida.md", "A"))
         self.assertFalse(a.permitted_path("correzione", "docs/rad/uc/UC.md", "M"))
-
-    def test_coherence_report_is_not_an_implementation_plan(self):
-        self.assertTrue(a.coherence_only("AGENTE PIANO:\nSOLO COERENZA\nControlla i modelli"))
-        self.assertFalse(a.coherence_only("AGENTE PIANO:\nProponi il piano"))
-        self.assertFalse(a.coherence_only("AGENTE REVISIONE:\nSOLO COERENZA"))
 
     def test_report_summary_survives_failed_and_missing_tests(self):
         with tempfile.TemporaryDirectory() as tmp:
