@@ -226,6 +226,8 @@ class ScopeTests(unittest.TestCase):
         self.assertIn("NON SUPERATA", body)
         self.assertIn("1 falliti/errori", body)
         self.assertIn("Build e test", body)
+        self.assertIn("### Risultati dei test (JUnit)", body)
+        self.assertIn("### Altri controlli CI", body)
         self.assertIn("Example.TF_01", body)
 
     def test_tester_rejects_outdated_commit(self):
