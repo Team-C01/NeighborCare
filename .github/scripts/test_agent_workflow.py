@@ -100,26 +100,27 @@ class ScopeTests(unittest.TestCase):
         self.assertEqual([line for line in message.splitlines() if line.startswith("Co-authored-by:")],
                          ["Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"])
 
-    def test_confirmed_coauthors_are_assigned_self_declared_and_unused(self):
+    def test_automatic_coauthors_credit_only_assigned_phase_initiator(self):
         users = [{"login": "tm", "id": 123, "type": "User"},
                  {"login": "other", "id": 456, "type": "User"}]
-        comments = [
-            {"id": 1, "user": users[0], "body": "COAUTORE: test - Definiti i casi limite",
-             "created_at": "2026-11-26T10:00:00Z"},
-            {"id": 2, "user": users[1], "body": "COAUTORE: implementazione - Scritto il componente",
-             "created_at": "2026-11-26T10:00:00Z"},
-            {"id": 3, "user": {"login": "outsider", "id": 789}, "body": "COAUTORE: test - Definiti i casi limite",
-             "created_at": "2026-11-26T10:00:00Z"},
-        ]
-        selected = a.confirmed_coauthors(users, comments, "test", set(), "2026-11-26T11:00:00Z")
-        self.assertEqual(selected, [(users[0], 1)])
-        self.assertEqual(a.confirmed_coauthors(users, comments, "test", {"1"}, "2026-11-26T11:00:00Z"), [])
-        self.assertEqual(a.confirmed_coauthors(users, comments, "test", set(), "2026-11-26T09:00:00Z"), [])
-        message = a.commit_message("test", "issue #55", "tm", ["tm", "other"], "url", selected)
-        self.assertIn("Coauthor-claim: 1", message)
-        self.assertEqual(message.count("Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"), 1)
-        self.assertNotIn("Co-authored-by: other", message)
-        self.assertTrue(message.endswith("Co-authored-by: tm <123+tm@users.noreply.github.com>"))
+        for phase in ("implementazione", "test", "correzione"):
+            with self.subTest(phase=phase):
+                selected = a.automatic_coauthors(users, "TM")
+                self.assertEqual(selected, [users[0]])
+                message = a.commit_message(phase, "issue #55", "tm", ["tm", "other"], "url", selected)
+                self.assertIn("Task-assignees: tm, other", message)
+                self.assertNotIn("Coauthor-claim:", message)
+                self.assertEqual(message.count("Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"), 1)
+                self.assertNotIn("Co-authored-by: other", message)
+                self.assertTrue(message.endswith("Co-authored-by: tm <123+tm@users.noreply.github.com>"))
+
+    def test_automatic_coauthors_reject_non_assignees_bots_and_invalid_ids(self):
+        users = [{"login": "tm", "id": 123, "type": "User"},
+                 {"login": "automation", "id": 456, "type": "Bot"},
+                 {"login": "invalid", "id": 0, "type": "User"}]
+        for actor in ("pm", "outsider", "automation", "invalid", "github-actions[bot]", None):
+            self.assertEqual(a.automatic_coauthors(users, actor), [])
+        self.assertEqual(a.automatic_coauthors([], "tm"), [])
 
     def test_apply_new_approved_plan(self):
         pr = {"number": 60, "body": "Closes #59\n<!-- neighborcare-approved-plan: 1 -->\nPiano approvato: https://github.com/old\n"}
@@ -143,7 +144,7 @@ class ScopeTests(unittest.TestCase):
 
     def test_publish_creates_assigned_pr_and_one_ci(self):
         issue = {"number": 58, "title": "Task tecnico", "body": "Requisiti",
-                 "assignees": [{"login": "tm"}]}
+                 "assignees": [{"login": "tm", "id": 123, "type": "User"}]}
         ctx = {"issue": issue, "pr": None, "plan": {"id": 42, "html_url": "https://github.com/plan"},
                "base": "a" * 40, "head": "a" * 40, "branch": "agent/issue-58-implementazione"}
         with tempfile.TemporaryDirectory() as tmp, patch.multiple(
@@ -171,6 +172,8 @@ class ScopeTests(unittest.TestCase):
             messages = [x.args[2] for x in git.call_args_list if x.args[:2] == ("commit", "-m")]
             self.assertEqual(len(messages), 1)
             self.assertIn("Requested-by: tm", messages[0])
+            self.assertIn("Co-authored-by: tm <123+tm@users.noreply.github.com>", messages[0])
+            self.assertNotIn("Coauthor-claim:", messages[0])
 
     def test_no_changes_does_not_commit_or_dispatch(self):
         pr = {"number": 59, "assignees": [{"login": "tm"}]}
