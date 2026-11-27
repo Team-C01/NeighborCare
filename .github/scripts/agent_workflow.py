@@ -346,7 +346,8 @@ def prepare():
         evidence["pr"] = {"number": pr["number"], "head": ctx["head"], "body": pr.get("body")}
         evidence["pr_comments"] = [{"by": c["user"]["login"], "body": bounded(c.get("body") or "", 2500)}
                                    for c in pages(f"issues/{pr['number']}/comments")[-10:]]
-        evidence["ci"] = ci_evidence(pr)
+        if PHASE != "test":
+            evidence["ci"] = ci_evidence(pr)
         evidence["commits"] = bounded(git("log", "--format=%h %an %s", "--name-status",
                                           f"{ctx['base']}..{ctx['head']}"), 12000)
         if PHASE == "revisione":
@@ -361,6 +362,9 @@ def prepare():
         "Per una PR senza Issue usa descrizione, diff e richiesta del team. "
         "Non dichiarare test superati se non risultano dalla CI dello stesso commit. "
         "La CI indipendente verifica il codice dopo la pubblicazione. "
+        + ("Per il Tester: il report AI descrive solo file, frame coperti, lacune e prove manuali. "
+           "Non includere stati CI, esiti, conteggi di esecuzione, attese o sezioni sulla verifica automatica: "
+           "il runner pubblica separatamente l\'esito definitivo. " if PHASE == "test" else "") +
         "Per un task tecnico senza UC usa i criteri autorizzati; non inventare modelli. "
         "Il revisore AI e consultivo, non approva la PR. "
         f"\nFASE: {PHASE}\n\nAGENTS.md (versione approvata):\n{rules}\n\nPROFILO AGENTE:\n{role}\n\nDATI DEL TASK:\n" +
@@ -439,6 +443,7 @@ def testing_result(number, head, branch, new_commit):
                         and (c.get("body") or "").startswith("<!-- neighborcare-ci-summary -->")
                         and f"Commit: `{head}`" in c["body"]
                         and f"/actions/runs/{run['id']})" in c["body"]), "")
+        lines.append("### Risultati dei test (JUnit)")
         for stack in ("Backend", "Frontend"):
             match = re.search(rf"(?m)^- {stack}: ([0-9]+ superati, [0-9]+ falliti/errori, [0-9]+ saltati)$", summary)
             lines.append(f"- {stack}: {match.group(1) if match else 'conteggi non disponibili; consultare il report CI'}")
@@ -446,6 +451,10 @@ def testing_result(number, head, branch, new_commit):
             names = re.search(rf"(?m)^- Test {stack} falliti: ([^\r\n]{{1,2000}})$", summary)
             if names and names.group(1) != "Nessuno riportato":
                 lines.append(f"- Test {stack} falliti: {names.group(1)}")
+        lines.append("### Altri controlli CI")
+        for label in ("PostgreSQL", "Maven (build/test)", "Build frontend", "Vitest", "Audit npm", "Analisi SonarQube"):
+            status = re.search(rf"(?m)^- {re.escape(label)}: (success|failure|skipped|cancelled|non eseguito)$", summary)
+            lines.append(f"- {label}: {status.group(1) if status else 'non disponibile'}")
         errors = [step["name"] for step in checks.get("steps") or []
                   if step.get("conclusion") in {"failure", "timed_out", "cancelled"}]
         if errors:
@@ -468,7 +477,7 @@ def dispatch_revision(number, head):
 
 def complete_testing(number, head, branch, body, new_commit):
     passed, result = testing_result(number, head, branch, new_commit)
-    comment(number, body + "\n\n## Esito dei test eseguiti\n\n" + result)
+    comment(number, body + "\n\n## Esito dei test eseguiti e della CI\n\n" + result)
     if new_commit:
         dispatch_revision(number, head)
     require(passed, "Fase Tester: verifica automatica non superata o non disponibile; leggere il report nella PR.")

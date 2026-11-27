@@ -11,6 +11,13 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['tests/**/*.test.{js,jsx}', 'tests/**/*.spec.{js,jsx}'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{js,jsx}'],
+      exclude: ['**/*.test.*', '**/*.spec.*', '**/__tests__/**'],
+      reporter: ['text', 'lcov'],
+      reportsDirectory: 'coverage',
+    },
     reporters: ['default', 'junit'],
     outputFile: {
       junit: 'test-results/junit.xml',

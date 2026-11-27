@@ -2,7 +2,7 @@ name: Revisore
 
 on:
   pull_request_target:
-    types: [ready_for_review, synchronize]
+    types: [opened, ready_for_review, synchronize]
   workflow_dispatch:
     inputs:
       pr_number:

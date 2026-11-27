@@ -40,7 +40,7 @@ Il manifest web rende l'app installabile nei browser compatibili, ma non è conf
 1. Creare una Issue e assegnare i responsabili; applicare `fase:piano`.
 2. Leggere il piano; applicare `fase:implementazione` per approvarlo.
 3. L'Implementatore crea la Draft PR; applicare `fase:test` per il Tester indipendente, che genera i test, avvia la CI e attende il risultato effettivo prima di pubblicare l'esito finale.
-4. Controllare il riepilogo CI e il collaudo; selezionare Ready for review per la prima revisione AI. Dopo nuovi commit su una PR Ready il Revisore si avvia automaticamente.
+4. Controllare il riepilogo CI e il collaudo; selezionare Ready for review per la prima revisione AI. Il Revisore si avvia anche all'apertura di una PR direttamente Ready e dopo nuovi commit su una PR Ready.
 5. Review umana indipendente; l'approvazione avvia la CI finale sulla PR. Merge manuale soltanto dopo il check obbligatorio verde.
 
 In caso di problemi usare `AGENTE PIANO:` sulla Issue, `AGENTE CORREGGI:` o `AGENTE TEST:` nella PR. Vedi la [guida operativa](docs/agentic-workflow-iterazioni.md).
@@ -58,4 +58,4 @@ Lo sviluppo manuale è supportato con branch, PR, test e review. Il report AI ai
 
 ## SonarQube Cloud (opzionale fino al setup)
 
-Importare la repository pubblica in SonarQube Cloud e scegliere un piano gratuito compatibile. Impostare in Settings > Secrets and variables > Actions le variabili `SONAR_PROJECT_KEY`, `SONAR_ORGANIZATION` e il secret `SONAR_TOKEN`. Disattivare Automatic Analysis nel progetto Sonar per evitare doppie analisi. La CI analizza Java e React su main e sulle PR interne verso main; senza le variabili il controllo viene saltato. La prima analisi deve stabilire la baseline di main. Sonar riporta il Quality Gate nel proprio dashboard: non è ancora configurato come gate obbligatorio, perché i report di coverage JaCoCo/LCOV non sono ancora disponibili. Il report JUnit contiene gli esiti, non la copertura del codice.
+Importare la repository pubblica in SonarQube Cloud e scegliere un piano gratuito compatibile. Impostare in Settings > Secrets and variables > Actions le variabili `SONAR_PROJECT_KEY`, `SONAR_ORGANIZATION` e il secret `SONAR_TOKEN`. Disattivare Automatic Analysis nel progetto Sonar per evitare doppie analisi. La CI analizza Java e React su main e sulle PR interne verso main; senza le variabili il controllo viene saltato. La prima analisi deve stabilire la baseline di main. Sonar riporta il Quality Gate nel proprio dashboard: rimane consultivo (non è un check obbligatorio). La CI produce JaCoCo XML per Java e LCOV tramite Vitest V8 per React, e Sonar li importa; la soglia del Quality Gate non viene abbassata. Il report JUnit contiene gli esiti, non la copertura del codice.

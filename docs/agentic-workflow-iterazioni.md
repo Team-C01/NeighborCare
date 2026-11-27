@@ -7,7 +7,7 @@
 3. L'Implementatore pubblica il codice su un branch del task e apre una Draft PR con gli stessi assegnatari della Issue. Il runner verifica l'ambito prima della pubblicazione; la CI verifica il codice.
 4. Applicare `fase:test` alla PR. Il Tester indipendente aggiunge o aggiorna i test, li fa eseguire dalla CI e attende il risultato. Pubblica in PR copertura, esito, conteggi ed eventuali errori; se la CI fallisce la fase non è superata. Se non servono modifiche, riusa una CI valida del commit corrente oppure la avvia se assente, senza produrre commit fittizi.
 5. Verificare il commento CI aggiornato nella PR, i dettagli in Actions e i Test Frame. La CI parte sui push manuali e dopo ogni commit dell'agente, senza avvio duplicato su apertura o sincronizzazione PR. Se non parte, usare Actions > CI > Run workflow selezionando il branch della PR.
-6. Selezionare Ready for review una sola volta. Il Revisore parte automaticamente anche dopo un nuovo commit su una PR non Draft. Il Revisore AI pubblica rilievi e suggerimenti consultivi, con commit, contesto e stato CI.
+6. Selezionare Ready for review una sola volta. Il Revisore parte automaticamente anche all'apertura di una PR direttamente Ready e dopo un nuovo commit su una PR non Draft. Il Revisore AI pubblica rilievi e suggerimenti consultivi, con commit, contesto e stato CI.
 7. Una persona con Write non coinvolta nel task verifica i risultati, risolve eventuali rilievi reali e approva la PR. La review umana invia la CI finale sul merge proposto: attendere repository-checks verde, quindi effettuare il merge manuale. Il check di una CI avviata via workflow_dispatch da solo non soddisfa il Ruleset.
 
 ## Se qualcosa non va
@@ -21,7 +21,7 @@ Usare un commento nella conversazione della Issue o della PR:
 | Issue | `AGENTE PIANO:` + spiegazione | Nuovo piano |
 | PR | `AGENTE CORREGGI:` + problema da risolvere | Correzione sul branch della stessa PR |
 | PR | `AGENTE TEST:` | Nuova sessione Tester |
-| PR
+
 
 Anche rimuovere e riapplicare la label della fase avvia un nuovo run. Non serve una label aggiuntiva, un particolare assegnatario o un commento di autorizzazione. Tester, Revisore e Correttore possono essere usati anche su PR manuali interne. Non occorre convertire la PR in Draft e poi Ready per ogni correzione: una nuova modifica rende comunque obsolete le approvazioni precedenti. Se l'aggiornamento del piano non produce un commit, chiedere comunque una nuova review umana sul nuovo ambito. Non avviare più agenti sulla stessa PR contemporaneamente; i run sono serializzati.
 

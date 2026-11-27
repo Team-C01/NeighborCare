@@ -24,7 +24,7 @@ jobs:
       frontend: ${{ steps.report.outputs.frontend }}
       backend_failed: ${{ steps.report.outputs.backend_failed }}
       frontend_failed: ${{ steps.report.outputs.frontend_failed }}
-      sonar: ${{ steps.sonar.outcome }}
+      sonar: ${{ steps.sonar.outcome == 'skipped' && steps.sonar_main.outcome || steps.sonar.outcome }}
       database: ${{ steps.verify.outputs.database }}
       backend_build: ${{ steps.verify.outputs.backend }}
       frontend_build: ${{ steps.verify.outputs.frontend_build }}
@@ -104,6 +104,12 @@ jobs:
             echo "Report non disponibile: checkout o preparazione falliti." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      - name: Verifica report coverage JaCoCo e Vitest
+        if: success()
+        run: |
+          test -s backend/target/site/jacoco/jacoco.xml
+          test -s frontend/coverage/lcov.info
+
       # Sonar Cloud Free supports main and PRs targeting main, not arbitrary branches.
       - name: Seleziona analisi SonarQube Cloud
         id: sonar_context
@@ -124,8 +130,13 @@ jobs:
           [[ -n "$pr" ]] || exit 0
           # Analyze the real PR head, not the synthetic merge commit.
           if [[ "$(git rev-parse HEAD)" != "$HEAD_SHA" ]]; then
+            # Reuse coverage only if application/build files are identical.
+            # Never clean JaCoCo or attach merge-ref coverage to different source.
+            if ! git diff --quiet HEAD "$HEAD_SHA" -- backend frontend sonar-project.properties; then
+              echo "Analisi Sonar saltata sul merge ref: eseguire la CI sul branch della PR per coverage dello SHA esatto."
+              exit 0
+            fi
             git checkout --detach "$HEAD_SHA"
-            mvn -B -f backend/pom.xml -DskipTests clean compile
           fi
           printf 'scan=true\npr=%s\nbranch=%s\n' "$pr" "$BRANCH" >> "$GITHUB_OUTPUT"
       - name: SonarQube Cloud - main
