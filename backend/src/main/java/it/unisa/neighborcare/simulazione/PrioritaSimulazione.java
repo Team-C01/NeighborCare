@@ -7,6 +7,6 @@ public class PrioritaSimulazione {
             throw new IllegalArgumentException();
         }
 
-        return punti >= 7 ? "ALTA" : "NORMALE";
+        return punti > 7 ? "ALTA" : "NORMALE";
     }
 }
