@@ -3,7 +3,7 @@ name: CI
 on:
   workflow_dispatch:
   push:
-    branches-ignore: [main]
+    branches: ['**']
   # Final check on the actual PR merge ref, triggered by the human review.
   pull_request_review:
     types: [submitted]
@@ -18,15 +18,21 @@ concurrency:
 jobs:
   repository-checks:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     outputs:
       backend: ${{ steps.report.outputs.backend }}
       frontend: ${{ steps.report.outputs.frontend }}
+      backend_failed: ${{ steps.report.outputs.backend_failed }}
+      frontend_failed: ${{ steps.report.outputs.frontend_failed }}
+      sonar: ${{ steps.sonar.outcome }}
       database: ${{ steps.verify.outputs.database }}
       backend_build: ${{ steps.verify.outputs.backend }}
       frontend_build: ${{ steps.verify.outputs.frontend_build }}
       frontend_tests: ${{ steps.verify.outputs.frontend_tests }}
       audit: ${{ steps.verify.outputs.audit }}
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -98,6 +104,56 @@ jobs:
             echo "Report non disponibile: checkout o preparazione falliti." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # Sonar Cloud Free supports main and PRs targeting main, not arbitrary branches.
+      - name: Seleziona analisi SonarQube Cloud
+        id: sonar_context
+        if: success() && vars.SONAR_PROJECT_KEY != '' && vars.SONAR_ORGANIZATION != '' && (github.event_name != 'pull_request_review' || github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$BRANCH" == main ]]; then
+            echo "scan=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          prs=$(gh api --method GET "repos/$REPO/pulls" -f state=open -f base=main -f "head=${REPO%%/*}:$BRANCH")
+          pr=$(jq -r --arg sha "$HEAD_SHA" --arg repo "$REPO" '.[] | select(.head.sha == $sha and .head.repo.full_name == $repo) | .number' <<< "$prs" | head -n 1)
+          [[ -n "$pr" ]] || exit 0
+          # Analyze the real PR head, not the synthetic merge commit.
+          if [[ "$(git rev-parse HEAD)" != "$HEAD_SHA" ]]; then
+            git checkout --detach "$HEAD_SHA"
+            mvn -B -f backend/pom.xml -DskipTests clean compile
+          fi
+          printf 'scan=true\npr=%s\nbranch=%s\n' "$pr" "$BRANCH" >> "$GITHUB_OUTPUT"
+      - name: SonarQube Cloud - main
+        id: sonar_main
+        if: steps.sonar_context.outputs.scan == 'true' && steps.sonar_context.outputs.pr == ''
+        uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          args: >
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
+            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+      - name: SonarQube Cloud - PR
+        id: sonar
+        if: steps.sonar_context.outputs.scan == 'true' && steps.sonar_context.outputs.pr != ''
+        uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          args: >
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
+            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+            -Dsonar.pullrequest.key=${{ steps.sonar_context.outputs.pr }}
+            -Dsonar.pullrequest.branch=${{ steps.sonar_context.outputs.branch }}
+            -Dsonar.pullrequest.base=main
+
   report-pr:
     needs: repository-checks
     if: always() && !cancelled() && github.repository == 'Team-C01/NeighborCare' && (github.event_name != 'pull_request_review' || github.event.pull_request.head.repo.full_name == github.repository)
@@ -116,6 +172,9 @@ jobs:
           CHECK_RESULT: ${{ needs.repository-checks.result }}
           BACKEND: ${{ needs.repository-checks.outputs.backend }}
           FRONTEND: ${{ needs.repository-checks.outputs.frontend }}
+          BACKEND_FAILED: ${{ needs.repository-checks.outputs.backend_failed }}
+          FRONTEND_FAILED: ${{ needs.repository-checks.outputs.frontend_failed }}
+          SONAR: ${{ needs.repository-checks.outputs.sonar }}
           DATABASE: ${{ needs.repository-checks.outputs.database }}
           BACKEND_BUILD: ${{ needs.repository-checks.outputs.backend_build }}
           FRONTEND_BUILD: ${{ needs.repository-checks.outputs.frontend_build }}
@@ -137,9 +196,16 @@ jobs:
           safe_status() {
             case "$1" in success|failure|skipped|cancelled) printf '%s' "$1";; *) printf 'non eseguito';; esac
           }
+          safe_names() {
+            if [[ -n "$1" && "${#1}" -le 2000 ]]; then
+              printf '%s' "$1" | tr -d '\r\n'
+            else
+              printf 'Nessuno riportato'
+            fi
+          }
           marker='<!-- neighborcare-ci-summary -->'
-          body=$(printf '%s\n## CI NeighborCare - %s\n\nCommit: `%s`\n\n- PostgreSQL: %s\n- Maven (build/test): %s\n- Backend: %s\n- Build frontend: %s\n- Vitest: %s\n- Frontend: %s\n- Audit npm: %s\n\n[Dettagli e report](https://github.com/%s/actions/runs/%s). I test manuali restano da documentare.\n' \
-            "$marker" "$(safe_status "$CHECK_RESULT")" "$HEAD_SHA" "$(safe_status "$DATABASE")" "$(safe_status "$BACKEND_BUILD")" "$(safe_counts "$BACKEND")" "$(safe_status "$FRONTEND_BUILD")" "$(safe_status "$FRONTEND_TESTS")" "$(safe_counts "$FRONTEND")" "$(safe_status "$AUDIT")" "$REPO" "$GITHUB_RUN_ID")
+          body=$(printf '%s\n## CI NeighborCare - %s\n\nCommit: `%s`\n\n- PostgreSQL: %s\n- Maven (build/test): %s\n- Backend: %s\n- Build frontend: %s\n- Vitest: %s\n- Frontend: %s\n- Audit npm: %s\n- Test backend falliti: %s\n- Test frontend falliti: %s\n- Analisi SonarQube: %s\n\n[Dettagli e report](https://github.com/%s/actions/runs/%s). I test manuali restano da documentare.\n' \
+            "$marker" "$(safe_status "$CHECK_RESULT")" "$HEAD_SHA" "$(safe_status "$DATABASE")" "$(safe_status "$BACKEND_BUILD")" "$(safe_counts "$BACKEND")" "$(safe_status "$FRONTEND_BUILD")" "$(safe_status "$FRONTEND_TESTS")" "$(safe_counts "$FRONTEND")" "$(safe_status "$AUDIT")" "$(safe_names "$BACKEND_FAILED")" "$(safe_names "$FRONTEND_FAILED")" "$(safe_status "$SONAR")" "$REPO" "$GITHUB_RUN_ID")
           comment=$(gh api --paginate "repos/$REPO/issues/$pr/comments?per_page=100" --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- neighborcare-ci-summary -->"))) | .id' | tail -n 1)
           [[ "$(gh api "repos/$REPO/pulls/$pr" --jq .head.sha)" == "$HEAD_SHA" ]] || exit 0
           if [[ -n "$comment" ]]; then

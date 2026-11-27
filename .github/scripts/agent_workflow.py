@@ -441,6 +441,10 @@ def testing_result(number, head, branch, new_commit):
         for stack in ("Backend", "Frontend"):
             match = re.search(rf"(?m)^- {stack}: ([0-9]+ superati, [0-9]+ falliti/errori, [0-9]+ saltati)$", summary)
             lines.append(f"- {stack}: {match.group(1) if match else 'conteggi non disponibili; consultare il report CI'}")
+        for stack in ("backend", "frontend"):
+            names = re.search(rf"(?m)^- Test {stack} falliti: ([^\r\n]{{1,2000}})$", summary)
+            if names and names.group(1) != "Nessuno riportato":
+                lines.append(f"- Test {stack} falliti: {names.group(1)}")
         errors = [step["name"] for step in checks.get("steps") or []
                   if step.get("conclusion") in {"failure", "timed_out", "cancelled"}]
         if errors:

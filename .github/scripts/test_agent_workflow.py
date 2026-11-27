@@ -209,7 +209,7 @@ class ScopeTests(unittest.TestCase):
                "steps": [{"name": "Build e test", "conclusion": "failure"}]}
         summary = {"user": {"login": "github-actions[bot]"}, "body":
                    "<!-- neighborcare-ci-summary -->\nCommit: `" + "b"*40 +
-                   "`\n- Backend: 1 superati, 1 falliti/errori, 0 saltati\n[CI](https://github.com/r/actions/runs/1)"}
+                   "`\n- Backend: 1 superati, 1 falliti/errori, 0 saltati\n- Test backend falliti: Example.TF_01\n[CI](https://github.com/r/actions/runs/1)"}
         with patch.object(a, "dispatch_ci", return_value="CI avviata") as dispatch, \
              patch.object(a, "wait_for_test_ci", return_value=(run, None)), \
              patch.object(a, "repo_api", return_value={"jobs": [job]}), \
@@ -223,6 +223,7 @@ class ScopeTests(unittest.TestCase):
         self.assertIn("NON SUPERATA", body)
         self.assertIn("1 falliti/errori", body)
         self.assertIn("Build e test", body)
+        self.assertIn("Example.TF_01", body)
 
     def test_tester_rejects_outdated_commit(self):
         with patch.object(a, "repo_api", return_value={"state": "open", "head": {"sha": "c"*40}}):
@@ -269,6 +270,14 @@ class ScopeTests(unittest.TestCase):
                 self.assertIn("backend=1 superati, 1 falliti/errori, 0 saltati", Path("output").read_text())
             finally:
                 os.chdir(original)
+
+    def test_failed_test_names_are_reported_without_assertion_details(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "test.xml"
+            report.write_text('<testsuite><testcase classname="Example" name="TF_01"><failure>secret assertion</failure></testcase><testcase name="TF_02"/><testcase classname="App" name="TF_03"><error/></testcase></testsuite>')
+            names = v.failed_test_names([report])
+            self.assertEqual(names, "Example.TF_01; App.TF_03")
+            self.assertNotIn("secret assertion", names)
 
     def test_reports_count_skipped_and_failure(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -10,7 +10,7 @@ Progetto universitario di Ingegneria del Software e Gestione dei Progetti Softwa
 - [.github/agents/](.github/agents/): quattro profili Copilot dedicati a Pianificatore, Implementatore, Tester e Revisore.
 - [.github/ISSUE_TEMPLATE/task-agente.yml](.github/ISSUE_TEMPLATE/task-agente.yml), [template PR](.github/pull_request_template.md) e [CODEOWNERS](.github/CODEOWNERS): task, tracciabilità e responsabilità.
 
-I workflow agentici usano Copilot CLI con un runner condiviso: preparazione del contesto, generazione della patch e pubblicazione separata. La CI è indipendente dall'AI: parte sui push manuali, dopo ogni commit agente e alla review umana finale. I commit AI riportano il richiedente effettivo, i responsabili e il run; le PR ereditano gli assegnatari della Issue. Il bot resta autore dei commit AI; i contributori assegnati che dichiarano un contributo effettivo prima della fase compaiono anche come coautori GitHub. La CI aggiorna un unico commento riepilogativo sulla PR.
+I workflow agentici usano Copilot CLI con un runner condiviso: preparazione del contesto, generazione della patch e pubblicazione separata. La CI è indipendente dall'AI: parte sui push manuali (anche main), dopo ogni commit agente e alla review umana finale. I commit AI riportano il richiedente effettivo, i responsabili e il run; le PR ereditano gli assegnatari della Issue. Il bot resta autore dei commit AI; i contributori assegnati che dichiarano un contributo effettivo prima della fase compaiono anche come coautori GitHub. La CI aggiorna un unico commento riepilogativo sulla PR.
 
 ## Avvio locale (bootstrap)
 
@@ -55,3 +55,7 @@ In caso di problemi usare `AGENTE PIANO:` sulla Issue, `AGENTE CORREGGI:` o `AGE
 - Protezioni main: review indipendente e repository-checks; CODEOWNERS indica i reviewer. Mai push diretto o merge automatico.
 
 Lo sviluppo manuale è supportato con branch, PR, test e review. Il report AI aiuta il team, ma non sostituisce le verifiche o la responsabilità dei revisori.
+
+## SonarQube Cloud (opzionale fino al setup)
+
+Importare la repository pubblica in SonarQube Cloud e scegliere un piano gratuito compatibile. Impostare in Settings > Secrets and variables > Actions le variabili `SONAR_PROJECT_KEY`, `SONAR_ORGANIZATION` e il secret `SONAR_TOKEN`. Disattivare Automatic Analysis nel progetto Sonar per evitare doppie analisi. La CI analizza Java e React su main e sulle PR interne verso main; senza le variabili il controllo viene saltato. La prima analisi deve stabilire la baseline di main. Sonar riporta il Quality Gate nel proprio dashboard: non è ancora configurato come gate obbligatorio, perché i report di coverage JaCoCo/LCOV non sono ancora disponibili. Il report JUnit contiene gli esiti, non la copertura del codice.
