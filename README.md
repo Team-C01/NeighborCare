@@ -10,7 +10,7 @@ Progetto universitario di Ingegneria del Software e Gestione dei Progetti Softwa
 - [.github/agents/](.github/agents/): quattro profili Copilot dedicati a Pianificatore, Implementatore, Tester e Revisore.
 - [.github/ISSUE_TEMPLATE/task-agente.yml](.github/ISSUE_TEMPLATE/task-agente.yml), [template PR](.github/pull_request_template.md) e [CODEOWNERS](.github/CODEOWNERS): task, tracciabilità e responsabilità.
 
-I workflow agentici usano Copilot CLI con un runner condiviso: preparazione del contesto, generazione della patch e pubblicazione separata. La CI è indipendente dall'AI: parte sui push manuali (anche main), dopo ogni commit agente e alla review umana finale. I commit AI riportano il richiedente effettivo, i responsabili e il run; le PR ereditano gli assegnatari della Issue. Il bot resta autore dei commit AI; i contributori assegnati che dichiarano un contributo effettivo prima della fase compaiono anche come coautori GitHub. La CI aggiorna un unico commento riepilogativo sulla PR.
+I workflow agentici usano Copilot CLI con un runner condiviso: preparazione del contesto, generazione della patch e pubblicazione separata. La CI è indipendente dall'AI: parte sui push manuali (anche main), dopo ogni commit agente e alla review umana finale. I commit AI riportano il richiedente effettivo, i responsabili e il run; le PR ereditano gli assegnatari della Issue. Il bot resta autore dei commit AI e Copilot compare come coautore; i contributori assegnati che dichiarano un contributo effettivo prima della fase compaiono anche come coautori GitHub. La CI aggiorna un unico commento riepilogativo sulla PR.
 
 ## Avvio locale (bootstrap)
 

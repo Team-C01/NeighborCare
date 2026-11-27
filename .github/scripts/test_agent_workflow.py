@@ -97,7 +97,8 @@ class ScopeTests(unittest.TestCase):
         self.assertIn("(demr64)", message)
         self.assertIn("Requested-by: demr64", message)
         self.assertIn("Task-assignees: kappq, demr64", message)
-        self.assertNotIn("Co-authored-by:", message)
+        self.assertEqual([line for line in message.splitlines() if line.startswith("Co-authored-by:")],
+                         ["Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"])
 
     def test_confirmed_coauthors_are_assigned_self_declared_and_unused(self):
         users = [{"login": "tm", "id": 123, "type": "User"},
@@ -116,6 +117,8 @@ class ScopeTests(unittest.TestCase):
         self.assertEqual(a.confirmed_coauthors(users, comments, "test", set(), "2026-11-26T09:00:00Z"), [])
         message = a.commit_message("test", "issue #55", "tm", ["tm", "other"], "url", selected)
         self.assertIn("Coauthor-claim: 1", message)
+        self.assertEqual(message.count("Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"), 1)
+        self.assertNotIn("Co-authored-by: other", message)
         self.assertTrue(message.endswith("Co-authored-by: tm <123+tm@users.noreply.github.com>"))
 
     def test_apply_new_approved_plan(self):

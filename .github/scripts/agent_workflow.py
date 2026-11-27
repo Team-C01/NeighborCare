@@ -243,13 +243,14 @@ def confirmed_coauthors(assignees, comments, phase, used_claims, before):
     return list(selected.values())
 
 def commit_message(phase, subject, actor, assignees, url, coauthors=()):
-    # Keep the bot as author; native coauthor trailers identify confirmed human contributions.
+    # Keep the bot as author; credit Copilot and confirmed human contributions.
     message = (f"agent({phase}): {subject} ({actor})\n\n"
                f"Requested-by: {actor}\n"
                f"Task-assignees: {', '.join(assignees) or 'none'}\n"
                f"Agent-run: {url}")
     for user, claim in coauthors:
         message += f"\nCoauthor-claim: {claim}"
+    message += "\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
     for user, claim in coauthors:
         login = user["login"]
         message += f"\nCo-authored-by: {login} <{user['id']}+{login}@users.noreply.github.com>"
