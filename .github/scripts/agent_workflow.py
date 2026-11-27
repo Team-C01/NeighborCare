@@ -226,32 +226,27 @@ def approved_pr_plan(issue, pr, comments):
     plans = [c for c in plans if c.get("created_at", "") <= pr.get("created_at", "")]
     return plans[-1]["body"] if plans else None
 
-def confirmed_coauthors(assignees, comments, phase, used_claims, before):
-    """Use only self-declared, phase-specific contributions by assigned humans."""
-    users = {a["login"].lower(): a for a in assignees if a.get("type") == "User"
-             and isinstance(a.get("id"), int) and a["id"] > 0
-             and re.fullmatch(r"[A-Za-z0-9-]+", a["login"])}
-    selected = {}
-    for c in comments:
-        login = c.get("user", {}).get("login", "").lower()
-        match = re.match(r"(?i)^COAUTORE:\s*(implementazione|test|correzione)\s*-\s*(\S[^\r\n]*)", c.get("body") or "")
-        if (login in users and c.get("user", {}).get("id") == users[login]["id"]
-                and match and match.group(1).lower() == phase and len(match.group(2).strip()) >= 10
-                and str(c["id"]) not in used_claims and c.get("created_at", "") <= before
-                and c.get("updated_at", c.get("created_at", "")) <= before):
-            selected[login] = (users[login], c["id"])
-    return list(selected.values())
+def automatic_coauthors(assignees, actor):
+    """Credit the assigned human initiating the phase, not passive assignees."""
+    if not isinstance(actor, str):
+        return []
+    for user in assignees:
+        login = user.get("login", "")
+        if (user.get("type") == "User" and isinstance(login, str)
+                and re.fullmatch(r"[A-Za-z0-9-]+", login)
+                and login.lower() == actor.lower()
+                and type(user.get("id")) is int and user["id"] > 0):
+            return [user]
+    return []
 
 def commit_message(phase, subject, actor, assignees, url, coauthors=()):
-    # Keep the bot as author; credit Copilot and confirmed human contributions.
+    # Keep the bot as author; credit Copilot and the assigned human phase initiator.
     message = (f"agent({phase}): {subject} ({actor})\n\n"
                f"Requested-by: {actor}\n"
                f"Task-assignees: {', '.join(assignees) or 'none'}\n"
                f"Agent-run: {url}")
-    for user, claim in coauthors:
-        message += f"\nCoauthor-claim: {claim}"
     message += "\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
-    for user, claim in coauthors:
+    for user in coauthors:
         login = user["login"]
         message += f"\nCo-authored-by: {login} <{user['id']}+{login}@users.noreply.github.com>"
     return message
@@ -538,9 +533,7 @@ def publish():
     assigned = (issue or pr or {}).get("assignees", [])
     assignee_logins = [a["login"] for a in assigned]
     number = pr["number"] if pr else issue["number"]
-    before = EVENT.get("comment", {}).get("created_at") or (EVENT.get("pull_request") or EVENT.get("issue") or {}).get("updated_at", "")
-    used_claims = set(re.findall(r"(?m)^Coauthor-claim: (\d+)$", git("log", "--format=%B", "HEAD")))
-    coauthors = confirmed_coauthors(assigned, pages(f"issues/{number}/comments"), PHASE, used_claims, before)
+    coauthors = automatic_coauthors(assigned, ACTOR)
     git("commit", "-m", commit_message(PHASE, subject, ACTOR, assignee_logins, url, coauthors))
     new_sha = git("rev-parse", "HEAD").strip()
     # Non-force push. Check that a new branch really does not exist.
