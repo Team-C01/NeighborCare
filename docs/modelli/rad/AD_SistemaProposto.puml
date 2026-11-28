@@ -1,0 +1,77 @@
+@startuml AD_SP_SistemaProposto
+
+skinparam monochrome true
+skinparam shadowing false
+
+|Beneficiario|
+start
+:Richiede assistenza;
+
+if (Compila\nrichiesta con IA?) then (No)
+    :Compila richiesta;
+else (Si)
+    :Compila richiesta IA;
+endif
+
+|Sistema|
+:Pubblica richiesta in\nbacheca;
+
+|Neighbor|
+repeat
+    :Accede e visualizza\ncommissioni;
+
+    if (Prende\nin carico\ncommissione?) then (Si)
+        |Sistema|
+        :Aggiorna stato\ncommissione e\nNeighbor;
+
+        |Beneficiario|
+        :Riceve notifica;
+
+        |Neighbor|
+        :Svolgimento\ncommissione;
+
+        while (Presenza\nproblematiche?) is (Risolvibile via\nchat)
+            :invia messaggio per\nnotificare;
+        endwhile (Altro)
+
+        if (Cause di forza\nmaggiore?) then (Si)
+            |Neighbor|
+            :Segnala anomalia;
+
+            |Coordinatore|
+            :Riceve anomalia;
+
+            if (Possibile\nportare a termine la\nrichiesta?) then (No)
+                |Coordinatore|
+                :Annulla richiesta;
+                stop
+            else (Si)
+                |Coordinatore|
+                :Esonera neighbor;
+            endif
+        else (No)
+            |Neighbor|
+            :Finisce commissione;
+
+            |Beneficiario|
+            :Conferma consegna;
+
+            |Sistema|
+            :Aggiorna stato\ncommissione;
+
+            |Beneficiario|
+            if (Rilascia\nrecensione?) then (Si)
+                :Scrive recensione;
+            else (No)
+            endif
+
+            :Richiesta portata a\ntermine con successo;
+            stop
+        endif
+    else (No)
+        |Neighbor|
+    endif
+    |Neighbor|
+repeat while ()
+
+@enduml

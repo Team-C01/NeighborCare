@@ -1,0 +1,67 @@
+@startuml SD_PresaInCaricoRichiesta
+
+skinparam monochrome true
+skinparam shadowing false
+hide footbox
+
+actor Neighbor
+boundary Richieste_Boundary
+control PresaInCarico_Control
+entity Richiesta_Entity
+
+activate Neighbor
+Neighbor -> Richieste_Boundary : selezionaRichiesta(id)
+activate Richieste_Boundary
+
+Richieste_Boundary -> PresaInCarico_Control : richiediDettagliParzialiRichiesta(id)
+deactivate Richieste_Boundary
+activate PresaInCarico_Control
+
+PresaInCarico_Control -> Richiesta_Entity : ottieniDettagliParzialiRichiesta(id)
+activate Richiesta_Entity
+Richiesta_Entity -->> PresaInCarico_Control : dettagliParziali
+
+create boundary DettagliRichiesta_Boundary
+PresaInCarico_Control -->> DettagliRichiesta_Boundary : <<create>>
+
+alt conferma accettazione
+    Neighbor -> DettagliRichiesta_Boundary : cliccaConfermaAccettazione()
+    activate DettagliRichiesta_Boundary
+    DettagliRichiesta_Boundary -> PresaInCarico_Control : confermaAccettazione()
+
+    loop while si verifica un errore di connessione
+        PresaInCarico_Control -> DettagliRichiesta_Boundary : mostraErroreDiConnessione()
+        Neighbor -> DettagliRichiesta_Boundary : cliccaEffettuaNuovoTentativo()
+        DettagliRichiesta_Boundary -> PresaInCarico_Control : effettuaNuovoTentativo()
+    end
+
+    alt commissione ancora disponibile
+        PresaInCarico_Control -> Richiesta_Entity : impostaStatoAccettato(id)
+        PresaInCarico_Control -> Richiesta_Entity : ottieniDettagliCompleti(id)
+        Richiesta_Entity -->> PresaInCarico_Control : dettagliCompleti
+        deactivate Richiesta_Entity
+        PresaInCarico_Control -> DettagliRichiesta_Boundary : mostraDettagliCompleti()
+    else commissione non più disponibile
+        PresaInCarico_Control -> Richieste_Boundary : mostraRichieste()
+        activate Richieste_Boundary
+        deactivate Richieste_Boundary
+        destroy DettagliRichiesta_Boundary
+    end
+
+    create entity Notifica_Entity
+    PresaInCarico_Control -->> Notifica_Entity : <<create>>
+
+else annullamento accettazione
+    Neighbor -> DettagliRichiesta_Boundary : cliccaAnnulla()
+    activate DettagliRichiesta_Boundary
+    DettagliRichiesta_Boundary -> PresaInCarico_Control : annulla()
+    PresaInCarico_Control -> Richieste_Boundary : mostraRichieste()
+    activate Richieste_Boundary
+    deactivate Richieste_Boundary
+    destroy DettagliRichiesta_Boundary
+end
+
+deactivate PresaInCarico_Control
+deactivate Neighbor
+
+@enduml

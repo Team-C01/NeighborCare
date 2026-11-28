@@ -1,0 +1,36 @@
+@startuml SDD_DiagrammaDipendenze
+
+skinparam monochrome true
+skinparam shadowing false
+skinparam componentStyle uml1
+skinparam linetype ortho
+skinparam nodesep 60
+skinparam ranksep 60
+
+component "Gestione\nNotifiche" as Notifiche
+interface " " as Notifiche_IF
+
+component "Gestione\nComunità" as Comunita
+component "Gestione\ncomunicazione" as Comunicazione
+component "Gestione\nUtenti" as Utenti
+component "Gestione\nRichieste" as Richieste
+
+component "Gestione\nNeighbor" as Neighbor
+component "Gestione\nBeneficiario" as Beneficiario
+component "Gestione Servizi\nEsterni" as ServiziEsterni
+
+Notifiche -down- Notifiche_IF
+
+Comunita .up.> Notifiche_IF : use
+Comunicazione .up.> Notifiche_IF : use
+Utenti .up.> Notifiche_IF : use
+Richieste .up.> Notifiche_IF : use
+
+Neighbor .up.> Utenti : use
+Beneficiario .up.> Utenti : use
+Neighbor .up.> Notifiche_IF : use
+Beneficiario .up.> Notifiche_IF : use
+
+Richieste .down.> ServiziEsterni : use
+
+@enduml

@@ -1,0 +1,33 @@
+@startuml ST_StatoRichiesta
+
+skinparam monochrome true
+skinparam shadowing false
+skinparam nodesep 70
+skinparam ranksep 80
+hide empty description
+
+state "In attesa" as InAttesa
+state "Accettata" as Accettata
+state "Ritirata" as Ritirata
+state "Annullata" as Annullata
+state "Consegnata" as Consegnata
+state "Completata" as Completata
+
+[*] -down-> InAttesa : salvaRichiesta()
+
+InAttesa -right-> Accettata : accettaRichiesta()\n[neighborVerificato]\n/assegnaNeighbor()
+Accettata -left-> InAttesa : esoneraNeighbor()\n/notificaEsonero()
+
+Accettata -right-> Ritirata : segnalaRitiro()\n/notificaBeneficiario()
+
+InAttesa -down-> Annullata : annullaRichiesta()\n[ruolo=Coordinatore ||\nruolo=Beneficiario]/\nrimuoviDallaBacheca()
+Accettata -down-> Annullata : annullaRichiesta()\n[ruolo=Coordinatore &&\nStatoAnomalia=Risolta]/\nnotificaEsoneroNeighbor()
+Ritirata -down-> Annullata : annullaRichiesta()\n[ruolo=Coordinatore] /\nistruzioniRestituzione()
+
+Ritirata -down-> Consegnata : segnalaConsegna()\n/notificaBeneficiario()
+Consegnata -left-> Completata : confermaCompletamentoNeighbor()\n/richiediConfermaBeneficiario()/\narchiviaRichiesta()
+
+Annullata -down-> [*]
+Completata -left-> [*]
+
+@enduml

@@ -1,0 +1,141 @@
+@startuml prova
+skinparam nodesep 80
+skinparam ranksep 80
+
+class Notifica{
+    -idNotifica: Integer
+    -titolo: String
+    -testo: String
+    -tipoNotifica: TipoNotifica
+    -dataOra: LocalDateTime
+}
+
+enum TipoNotifica{
+    RICHIESTA_ACCETTATA
+    RICHIESTA_RIFIUTATA
+    RICHIESTA_ANNULLATA
+    RICHIESTA_RITIRATA
+    RICHIESTA_CONSEGNATA
+    RICHIESTA_COMPLETATA
+    MESSAGGIO_RICEVUTO
+    ESONERO_CONFERMATO
+}
+
+class UtenteRegistrato{
+    -idUtente: Integer
+    -nome: String
+    -cognome: String
+    -dataNascita: LocalDate
+    -indirizzo: String
+    -email: String
+    -passwordHash: String
+}
+
+class Comunita{
+    -idComunita: Integer
+    -identificativo: String
+    -nome: String
+    +aggiungiRichiesta(richiesta: Richiesta): boolean
+    +aggiungiNeighbor(neighbor: Neighbor): boolean
+    +aggiungiBeneficiario(beneficiario: Beneficiario): boolean
+}
+
+class Neighbor{
+    -idNeighbor: Integer
+    -statoNeighbor: StatoNeighbor
+    -tipoDocumento: String
+    -codiceDocumento: String
+    -immagineDocumento: Image
+    -motivoDisattivazione: String
+    +verifica(): boolean
+    +rifiuta(): boolean
+    +disattiva(): boolean
+}
+
+enum StatoNeighbor{
+    IN_ATTESA_DI_VERIFICA
+    VERIFICATO
+    RIFIUTATO
+    DISATTIVATO
+}   
+
+class Beneficiario{
+    -idBeneficiario: Integer
+}
+
+class Coordinatore{
+    -idCoordinatore: Integer
+}
+
+class Richiesta{
+    -idRichiesta: Integer
+    -codiceRichiesta: String
+    -tipologiaCommissione: String
+    -descrizione: String
+    -luogoRitiro: String
+    -luogoConsegna: String
+    -dataRitiro: LocalDateTime
+    -dataConsegna: LocalDateTime
+    -dataCompletamento: LocalDateTime
+    -dataCreazione: LocalDateTime
+    -stato: StatoRichiesta
+    +accetta(): boolean
+    +annulla(): boolean
+    +segnalaRitiro(): boolean
+    +segnalaConsegna(): boolean
+    +segnalaCompletamento(): boolean
+}
+
+enum StatoRichiesta{
+    IN_ATTESA
+    ACCETTATA
+    RITIRATA
+    ANNULLATA
+    CONSEGNATA
+    COMPLETATA
+}
+
+class Messaggio{
+    -idMessaggio: Integer
+    -testo: String
+    -dataOra: LocalDateTime
+}
+
+class Chat{
+    -idChat: Integer
+    +aggiungiMessaggio(messaggio: Messaggio): boolean
+}
+
+Notifica "*" -* "1" UtenteRegistrato
+
+UtenteRegistrato <|-- Neighbor
+
+UtenteRegistrato <|-- Beneficiario
+
+UtenteRegistrato <|-- Coordinatore
+
+Comunita "1" o-- "*" Neighbor
+
+Comunita "1" o-- "*" Beneficiario
+
+Comunita "1" -- "1" Coordinatore: gestisce
+
+Comunita "1" -- "*" Richiesta: comprende 
+
+Beneficiario "1" -- "*" Richiesta: crea
+
+Neighbor "0..1" -- "*" Richiesta: accetta
+
+Chat "0..1" - "1" Richiesta: contiene
+
+Messaggio "*" -* "1" Chat 
+
+StatoNeighbor - Neighbor: può essere
+
+StatoRichiesta - Richiesta: può essere
+
+Messaggio "0..*" - "1" UtenteRegistrato: inviato da
+
+Notifica -up- TipoNotifica: può essere
+
+@endumld

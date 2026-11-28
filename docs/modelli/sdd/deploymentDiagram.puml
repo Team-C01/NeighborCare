@@ -1,0 +1,33 @@
+@startuml deploymentDiagram
+
+node "Dispositivo Utente (Mobile/Desktop)" <<device>> as DU {
+  node "Sistema Operativo (Android/iOS/Windows/Linux/MacOS)" <<executionEnvironment>> {
+    node "Web Browser" <<executionEnvironment>> {
+      component "Progessive Web App (JavaScript, React)" <<component>> 
+    }
+  }
+}
+
+node "Web Server" <<device>>  as WS{
+  node "GNU/Linux" <<executionEnvironment>> {
+    node "Java Runtime Environment (JRE)" <<executionEnvironment>> {
+      component "Business Logic (Java, Spring Boot)" <<component>> 
+    }
+  }
+}
+
+node "Database Server" <<device>> as DS {
+  node "DBMS" <<executionEnvironment>> {
+      component "PostgreSQL" <<component>> 
+  }
+}
+
+node "Server Esterno" <<device>> as SE {
+    component "API Esterna" <<component>> 
+}
+
+DU -right- WS: HTTPS
+WS -right- SE: HTTPS
+WS -down- DS: JDBC
+
+@enduml

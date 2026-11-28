@@ -1,0 +1,25 @@
+@startwbs NP_Neighbor
+
+skinparam monochrome true
+skinparam shadowing false
+
+* Home Neighbor
+** Il mio Profilo
+*** Modifica Dati Personali
+*** Logout
+** Notifiche
+** Bacheca Richieste
+*** Dettagli Parziali Richiesta
+**** "Accetta Richiesta" as accetta
+** Richieste in Carico
+*** "Dettagli Completi Richiesta" as dC
+**** Ritiro
+**** Consegna
+**** Apri Chat
+**** Segnala Anomalia
+** Cronologia Richieste
+
+accetta -> dC
+
+@endwbs
+

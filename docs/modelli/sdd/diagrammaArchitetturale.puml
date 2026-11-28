@@ -1,0 +1,77 @@
+@startuml SDD_DiagrammaArchitetturale
+
+top to bottom direction
+skinparam linetype ortho
+
+
+package "PresentationTier" {
+    component "NotificaGUI" as NotificaGUI
+    component "UtentiGUI" as UtentiGUI
+    component "CoordinatoreGUI" as CoordinatoreGUI
+    component "NeighborGUI" as NeighborGUI
+    component "ComunitàGUI" as ComunitaGUI
+    component "BeneficiarioGUI" as BeneficiarioGUI
+    component "ComunicazioniGUI" as ComunicazioniGUI
+    component "RichiesteGUI" as RichiesteGUI
+    component "ServiziGUI" as ServiziGUI
+}
+
+package "ApplicationTier" {
+    component "GestioneNotifica" as GestioneNotifica
+    component "GestioneUtenti" as GestioneUtenti
+    component "GestioneNeighbor" as GestioneNeighbor
+    component "GestioneComunità" as GestioneComunita
+    component "GestioneBeneficiario" as GestioneBeneficiario
+    component "GestioneComunicazione" as GestioneComunicazione
+    component "GestioneRichiesta" as GestioneRichiesta
+    component "GestioneServizi" as GestioneServizi
+}
+
+package "Data Tier" {
+    component "NotificaRepository" as NotificaRepo
+    component "UtentiRepository" as UtentiRepo
+    component "CoordinatoreRepository" as CoordinatoreRepo
+    component "NeighborRepository" as NeighborRepo
+    component "ComunitaRepository" as ComunitaRepo
+    component "BeneficiarioRepository" as BeneficiarioRepo
+    component "MessaggioRepository" as MessaggioRepo
+    component "ChatRepository" as ChatRepo
+    component "RichiestaRepository" as RichiestaRepo
+}
+
+NotificaGUI --(0-- GestioneNotifica
+UtentiGUI --(0-- GestioneUtenti
+CoordinatoreGUI --(0-- GestioneUtenti
+NeighborGUI --(0-- GestioneNeighbor
+ComunitaGUI --(0-- GestioneComunita
+BeneficiarioGUI --(0-- GestioneBeneficiario
+ComunicazioniGUI --(0-- GestioneComunicazione
+RichiesteGUI --(0-- GestioneRichiesta
+ServiziGUI --(0-- GestioneServizi
+
+GestioneNotifica -- IF_Notifica
+GestioneUtenti -( IF_Notifica
+GestioneNeighbor -( IF_Notifica
+GestioneComunita -( IF_Notifica
+GestioneBeneficiario -( IF_Notifica
+GestioneComunicazione -( IF_Notifica
+GestioneRichiesta -( IF_Notifica
+
+GestioneRichiesta --(0-- GestioneServizi
+GestioneBeneficiario --(0-- GestioneUtenti
+GestioneNotifica --(0-- NotificaRepo 
+GestioneUtenti --(0-- UtentiRepo
+GestioneUtenti --(0-- CoordinatoreRepo
+GestioneNeighbor --(0-- NeighborRepo
+GestioneComunita --(0-- ComunitaRepo
+GestioneBeneficiario --(0-- BeneficiarioRepo
+GestioneComunicazione --(0-- MessaggioRepo
+GestioneComunicazione --(0-- ChatRepo
+GestioneRichiesta --(0-- RichiestaRepo
+
+
+'Impostato per impilare i package (Non considerare nell'implementazione)
+NotificaGUI -[hidden]down-> GestioneNotifica
+GestioneNotifica -[hidden]down-> NotificaRepo
+@enduml
+

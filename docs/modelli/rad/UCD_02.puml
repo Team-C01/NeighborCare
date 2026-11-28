@@ -1,0 +1,17 @@
+@startuml UCD_02_GestioneUtente
+
+left to right direction
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle folder
+
+actor Utente as ut
+
+package "Gestione Utente" {
+    usecase "Login" 
+    usecase "Logout" 
+}
+
+ut -- "Login"
+ut -- "Logout"
+@enduml

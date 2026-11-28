@@ -1,0 +1,92 @@
+@startuml SQ_B_01_CreazioneRichiestaConIA
+
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam ParticipantPadding 25
+
+actor Beneficiario
+boundary InterfacciaApp_Boundary
+control GestioneRichiesta_Control
+boundary ServizioIA_Boundary
+entity "Comunità" as Comunita
+entity Richiesta
+
+activate Beneficiario
+activate InterfacciaApp_Boundary
+
+Beneficiario -> InterfacciaApp_Boundary : registraEInviaAudio()
+InterfacciaApp_Boundary -> GestioneRichiesta_Control : richiediElaborazioneAudio (fileAudio)
+activate GestioneRichiesta_Control
+
+GestioneRichiesta_Control -> ServizioIA_Boundary : elaboraAudio (fileAudio)
+activate ServizioIA_Boundary
+ServizioIA_Boundary --> GestioneRichiesta_Control : datiRichiesta (richiestaIA)
+deactivate ServizioIA_Boundary
+
+opt <back:white> se presente errore elaborazione </back>
+    loop while errore elaborazione
+        GestioneRichiesta_Control --> InterfacciaApp_Boundary : mostraErroreConScelta()
+        
+        alt compilazione manuale
+            Beneficiario -> InterfacciaApp_Boundary : sceltaCompilazioneManuale()
+            InterfacciaApp_Boundary -> GestioneRichiesta_Control : richiestaFormManuale()
+            GestioneRichiesta_Control --> InterfacciaApp_Boundary : mostraFormManuale()
+            ref over Beneficiario, InterfacciaApp_Boundary
+                chiama SQ_B_02 : Creazione
+                Richiesta Manuale
+            end ref
+            
+        else <back:white> nuova richiesta IA </back>
+            Beneficiario -> InterfacciaApp_Boundary : sceltaRiprovaCreazioneRichiestaIA()
+            Beneficiario -> InterfacciaApp_Boundary : registraEInviaAudio()
+            InterfacciaApp_Boundary -> GestioneRichiesta_Control : richiediElaborazioneAudio (fileAudio)
+            GestioneRichiesta_Control -> ServizioIA_Boundary : elaboraAudio (fileAudio)
+            activate ServizioIA_Boundary
+            ServizioIA_Boundary --> GestioneRichiesta_Control : datiRichiesta (richiestaIA)
+            deactivate ServizioIA_Boundary
+        end
+    end
+end
+
+GestioneRichiesta_Control --> InterfacciaApp_Boundary : formPrecompilato (richiestaIA)
+destroy ServizioIA_Boundary
+
+opt campi errati
+    Beneficiario -> InterfacciaApp_Boundary : compilazioneManuale()
+end
+
+Beneficiario -> InterfacciaApp_Boundary : conferma()
+InterfacciaApp_Boundary -> GestioneRichiesta_Control : confermaDati(richiesta)
+
+loop <back:white> per ogni campo </back>
+    GestioneRichiesta_Control -> GestioneRichiesta_Control : checkCampo()
+    opt <back:white> campo errato </back>
+        GestioneRichiesta_Control --> InterfacciaApp_Boundary : mostraCampoErrato()
+    end
+end
+
+Beneficiario -> InterfacciaApp_Boundary : compilazioneManuale()
+Beneficiario -> InterfacciaApp_Boundary : conferma()
+InterfacciaApp_Boundary -> GestioneRichiesta_Control : confermaDati(richiesta)
+
+GestioneRichiesta_Control -> Comunita : aggiungiRichiesta(richiesta)
+activate Comunita
+Comunita -> Richiesta : creaRichiesta(richiesta)
+activate Richiesta
+Richiesta --> Comunita : richiesta
+deactivate Richiesta
+Comunita --> GestioneRichiesta_Control : aggiunta
+deactivate Comunita
+
+alt <back:white> ok </back>
+    GestioneRichiesta_Control --> InterfacciaApp_Boundary : successoCreazione
+else errore
+    GestioneRichiesta_Control --> InterfacciaApp_Boundary : mostraErrore()
+    deactivate GestioneRichiesta_Control
+end
+
+deactivate InterfacciaApp_Boundary
+deactivate Beneficiario
+
+hide footbox
+@enduml

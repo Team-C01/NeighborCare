@@ -1,0 +1,21 @@
+@startwbs NP_Coordinatore
+
+* Dashboard Coordinatore
+** Elenco Neighbor in Attesa
+*** Dettaglio Richiesta di\nPartecipazione
+**** Verifica Neighbor
+**** Rifiuta Neighbor
+** Elenco Neighbors Verificati
+*** Dettagli Neighbor
+**** Statistiche Neighbor
+**** Disattiva Neighbor
+** Dashboard Anomalie
+*** Dettaglio Anomalia
+**** Esonera Neighbor
+**** Annulla Richiesta
+** Comunità
+*** Logout
+** Dashboard Richieste
+*** Dettaglio Richiesta
+
+@endwbs
